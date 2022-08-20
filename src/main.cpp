@@ -52,7 +52,60 @@ enum {S0 = 17, S1 = 2, S2 = 4, S3 = 16};
 //#include <oled/SSD1306Wire.h>
 //SSD1306Wire *display = new SSD1306Wire(0x3c, SDA_OLED, SCL_OLED, RST_OLED, GEOMETRY_128_64);
 
+
+
+
+#define _stringfy(s) #s
+#define stringfy_we(x) _stringfy(x##_WE_PIN)
+#define stringfy_ae(x) _stringfy(x##_AE_PIN)
+
+
+/**
+ * @brief You must put them in order that the sensors are connected to the board(REV2)
+ * Connector(analogInput1, analogInput2)
+ * J6(0,1) J9(2,3) J7(4, 5) J10(6,7) J11(8,9) J8(10, 11) J12(12)
+ * 
+ */
+
+/*typedef enum {
+  #define EXPAND_PINS(SENSOR)  SENSOR##_WE_PIN, SENSOR##_AE_PIN,
+  #include "sensors_config_pins.h"
+  #undef EXPAND_PINS
+  ANEM_PIN,
+  TOTAL_PINS
+}SensorAnalogPins;
+
+char *enum_str_full[] = {
+    #define EXPAND_PINS(x) [x##_WE_PIN] = stringfy_we(x), stringfy_ae(x),
+    #include "sensors_config_pins.h"
+    #undef EXPAND_PINS  
+};*/
+
+typedef enum {
+  CO_WE_PIN = 0, CO_AE_PIN, 
+  NH3_WE_PIN, NH3_AE_PIN, 
+  H2S_WE_PIN, H2S_AE_PIN, 
+  NO2_WE_PIN, NO2_AE_PIN, 
+  SO2_WE_PIN, SO2_AE_PIN, 
+  OX_WE_PIN, OX_AE_PIN, 
+  ANEM_PIN,
+  TOTAL_ANALOG_PINS
+}SensorAnalogPins;
+
+
 static uint8_t mydata[] = "Hello, world!";
+
+typedef struct sensor {
+  float ae_voltage;
+  float we_voltage;
+};
+
+struct sensores_estacao {
+
+  sensor co;
+  sensor nh3;
+
+};
 
 osjob_t sendjob;
 
@@ -106,13 +159,13 @@ void IRAM_ATTR timerADC(){
 }
 
 void init_timer(){
-  timer = timerBegin(0, 240, false); // Timer0, clk divided by 240 and count down
+  timer = timerBegin(1, 80, true); // Timer0, clk divided by 80 and count down (abp clk)
   if(!timer){
     Serial.println("Erro timer");
   }
   timerAttachInterrupt(timer, &timerADC, true);
   timerAlarmWrite(timer, 1000000, true);
-	timerAlarmEnable(timer);
+  timerAlarmEnable(timer);
 }
 
 void setup() {
@@ -124,18 +177,11 @@ void setup() {
     Serial.print(F("Frequency: ")); Serial.println(getCpuFrequencyMhz());
     Serial.print(F("Frequency ABP: ")); Serial.println(getApbFrequency());
    
-    
     //dht.begin();
 
     init_lora(&sendjob, DEVADDR, NWKSKEY, APPSKEY);
 
-    timer = timerBegin(1, 80, true); // Timer0, clk divided by 80 and count down (abp clk)
-    if(!timer){
-      Serial.println("Erro timer");
-    }
-    timerAttachInterrupt(timer, &timerADC, true);
-    timerAlarmWrite(timer, 1000000, true);
-    timerAlarmEnable(timer);
+    init_timer();
 
     Serial.println("Getting single-ended readings from AIN0..3");
     Serial.println("ADC Range: +/- 6.144V (1 bit = 3mV/ADS1015, 0.1875mV/ADS1115)");
@@ -167,42 +213,19 @@ void setup() {
 
 void loop() {
 
-  // Lê sensores Alphasense
-  //digitalWrite(25, HIGH);
-
   uint16_t adc = 0;
-  float v[12];
+  float v[13]; // L
   float anemometro=0, temperature=0, humidity=0;
 
-  /*for(uint8_t i = 0; i < (6*2); i++){
+  for(uint8_t i = 0; i < TOTAL_ANALOG_PINS; i++){
 
-      digitalWrite(S0, bitRead(i, 0));
-      digitalWrite(S1, bitRead(i, 1));
-      digitalWrite(S2, bitRead(i, 2));
-      digitalWrite(S3, bitRead(i, 3));
-      
+      digitalWrite(S0, bitRead(i, 0));digitalWrite(S1, bitRead(i, 1));
+      digitalWrite(S2, bitRead(i, 2));digitalWrite(S3, bitRead(i, 3));
       delayMicroseconds(10); 
 
-      //Serial.print("S0 "); Serial.println(digitalRead(S0));
-      //Serial.print("S1 "); Serial.println(digitalRead(S1));
-      //Serial.print("S2 "); Serial.println(digitalRead(S2));
-      //Serial.print("S3 "); Serial.println(digitalRead(S3));
-      //Serial.println("");
-
-      delayMicroseconds(1000); 
       adc = ads.readADC_SingleEnded(0);
       v[i] = ads.computeVolts(adc);
-  }*/
-
-  // Seleciona pino 12 do mux p/ ler o anemômetro
-  /*digitalWrite(S0, LOW);
-  digitalWrite(S1, LOW);
-  digitalWrite(S2, HIGH);
-  digitalWrite(S3, HIGH);
-  delayMicroseconds(10); 
-  adc = ads.readADC_SingleEnded(0);
-  anemometro = ads.computeVolts(adc);*/
-
+  }
 
 #if (PRINT_ANALOG_READS == 1)
   Serial.println("Imprimindo leituras adc");
@@ -225,6 +248,28 @@ void loop() {
 
     //Serial.print("Tempo: ");Serial.println(lastIntrAt - timer_aux);
     timer_aux = lastIntrAt;
+
+    for(uint8_t i = 0; i < (6*2) + 1; i++){
+
+      digitalWrite(S0, bitRead(i, 0));digitalWrite(S1, bitRead(i, 1));
+      digitalWrite(S2, bitRead(i, 2));digitalWrite(S3, bitRead(i, 3));
+      delayMicroseconds(10); 
+
+      adc = ads.readADC_SingleEnded(0);
+      v[i] = ads.computeVolts(adc);
+    }
+
+#if (PRINT_ANALOG_READS == 1)
+    Serial.println("Imprimindo leituras adc");
+
+    for(auto& i : v){
+      Serial.print(i); Serial.print(" ");
+    }
+    Serial.println(" ");
+    Serial.print("Temp: ");Serial.println(temperature);
+    Serial.print("Umid: ");Serial.println(humidity);
+#endif
+
 
     digitalWrite(25, !digitalRead(25));
   }
