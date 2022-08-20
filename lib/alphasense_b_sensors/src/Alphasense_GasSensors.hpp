@@ -6,9 +6,6 @@
 #include <string>
 #include <array>
 
-
-//extern std::map<std::string, std::array<std::array<float, 9>, 4>> ajuste_temp;
-
 typedef enum {COB4_n, H2SB4_n, NOB4_n, NO2B43F_n, OXB431_n, SO2B4_n} AlphasenseModel;
 
 
