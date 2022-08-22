@@ -1,4 +1,5 @@
 #include <string>
+#include <math.h>
 //#include <heltec.h>
 
 #include <Adafruit_ADS1X15.h>
@@ -81,6 +82,7 @@ char *enum_str_full[] = {
     #undef EXPAND_PINS  
 };*/
 
+
 typedef enum {
   CO_WE_PIN = 0, CO_AE_PIN, 
   NH3_WE_PIN, NH3_AE_PIN, 
@@ -95,17 +97,20 @@ typedef enum {
 
 static uint8_t mydata[] = "Hello, world!";
 
-typedef struct sensor {
-  float ae_voltage;
-  float we_voltage;
-};
+typedef struct __attribute__((packed)) _sensors_readings{
+  float co_ppb;
+  float nh3_ppb;
+  float no2_ppb;
+  float so2_ppb;
+  float ox_ppb;
+  float h2s_ppb;
+  float anem;
+  float temp;
+  float humidity;
 
-struct sensores_estacao {
+} SensorsReadings;
 
-  sensor co;
-  sensor nh3;
-
-};
+SensorsReadings readings; 
 
 osjob_t sendjob;
 
@@ -132,15 +137,42 @@ const lmic_pinmap lmic_pins = {
     //.spi_freq = 10000     /* 8 MHz */
 };
 
-void do_send(osjob_t* j){
+void do_send(osjob_t* job){
     // Check if there is not a current TX/RX job running
     if (LMIC.opmode & OP_TXRXPEND) {
         Serial.println(F("OP_TXRXPEND, not sending"));
     } else {
         // Prepare upstream data transmission at the next possible time.
-        // ler aqui
-        LMIC_setTxData2(1, mydata, sizeof(mydata)-1, 0);
+        // data = [co_ppb, no2_ppb, ox_ppb, h2s_ppb, nh3_ppb, so2_ppb, temp, umid]
+        // static uint8_t mydata[] = "Hello, world!";
+
+        float *kkkkk;
+        kkkkk = (float*)&readings; // Isso é uma gambi das boas
+
+        uint8_t *data = new uint8_t[18]; //  12B sensors + 4B temp and humidity + 2B anemom
+
+        for(uint32_t i = 1; i < 18; i+=2){
+
+          uint16_t aux = LMIC_f2uflt16(*(kkkkk + i/2) / 6.144); // 6.144 is the adc max value
+          data[i-1] = aux & 0x00FF;
+          data[i] = (aux & 0xFF00) >> 8;
+
+        }
+
+        for(int i = 1; i < 18; i+=2){
+          //  
+          //uint16_t aux = (data[i] << 8) | data[i-1];
+          uint16_t aux = LMIC_f2uflt16(1.6);
+          uint8_t b = (aux & 0xF000) >> 12;
+          uint16_t f = aux & 0x0FFF; 
+          Serial.print("Teste: "); Serial.print(aux);Serial.print(" : ");Serial.println(f / 4096.0 * pow(2, b-15));
+          // f/4096 * 2^(b-15)
+        }
+
+        
+        LMIC_setTxData2(1, data, sizeof(data)-1, 0);
         Serial.println(F("Packet queued"));
+        delete data;
     }
     // Next TX is scheduled after TX_COMPLETE event.
 }
