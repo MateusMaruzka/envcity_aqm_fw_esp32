@@ -20,6 +20,7 @@
 //#include "DHT.h"
 
 #define PRINT_ANALOG_READS 0
+#define PRINT_MSG_SENSORS 0
 //#include "DHT.h"
 
 AlphasenseSensorParam param1 = {"CO-B4", COB4_n,0.8,340,342, 475,0.38,0.28,310, 341, 0};
