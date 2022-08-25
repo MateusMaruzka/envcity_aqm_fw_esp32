@@ -17,7 +17,7 @@ struct AlphasenseSensorParam {
     int we_zero;
     int ae_zero;
     int we_sensor;
-    double ae_sensor;
+   // double ae_sensor;
     double sensitivity;
     int electronic_we;
     int electronic_ae;
@@ -33,7 +33,7 @@ public:
     AlphasenseGasSensor() {};
     AlphasenseGasSensor(AlphasenseSensorParam);
 
-    float ppb();
+    double ppb(float, float, float);
     
     void sensorConfiguration();
 
@@ -56,7 +56,7 @@ private:
     int _boardType;
     double _gain, _sensitivity;
     double _ae_zero, _we_zero;
-    double _we_sensor, _ae_sensor;
+    double _we_sensor;
     double _electr_we, _electr_ae;
 
     float *kt;

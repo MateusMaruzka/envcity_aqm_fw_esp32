@@ -53,7 +53,7 @@ AlphasenseGasSensor::AlphasenseGasSensor(AlphasenseSensorParam param){
     this->_ae_zero = param.ae_zero;
     this->_we_zero = param.we_zero;
     this->_we_sensor = param.we_sensor;
-    this->_ae_sensor = param.ae_sensor;
+   // this->_ae_sensor = param.ae_sensor;
     this->_electr_we = param.electronic_we;
     this->_electr_ae = param.electronic_ae;
 
@@ -109,7 +109,11 @@ double AlphasenseGasSensor::algorithm4(float raw_we, float temp){
 
 double AlphasenseGasSensor::simpleRead(float raw_we, float raw_ae){
 
-    return 0.0;
+    return (raw_we - this->_electr_we) - (raw_ae - this->_electr_ae);
+}
+
+double AlphasenseGasSensor::ppb(float raw_we, float raw_ae, float temp){
+    return this->simpleRead(raw_we, raw_ae) / this->_sensitivity;
 }
 
 Alphasense_COB4::Alphasense_COB4(AlphasenseSensorParam param) : AlphasenseGasSensor(param){}

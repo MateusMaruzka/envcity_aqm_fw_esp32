@@ -1,31 +1,36 @@
 #include <string>
 #include <math.h>
-//#include <heltec.h>
 
 #include <Adafruit_ADS1X15.h>
 #include <Wire.h>
 
-#include <ArduinoJson.h>
-#include <arduino_lmic.h>
 #include <Arduino.h>
+#include <ArduinoJson.h>
+
 #include <lmic.h>
 #include "arduino_lmic_hal_configuration.h"
 #include <hal/hal.h>
+#include <time.h>
+#include <sys/time.h>
 
 #include "Alphasense_GasSensors.hpp"
 #include "anemometro_analog.hpp"
 #include "envcity_lora_config.hpp"
 
-//#include <driver/timer.h>
 //#include "DHT.h"
 
 #define PRINT_ANALOG_READS 0
-#define PRINT_MSG_SENSORS 0
-//#include "DHT.h"
+#define PRINT_MESSAGE 0
 
-AlphasenseSensorParam param1 = {"CO-B4", COB4_n,0.8,340,342, 475,0.38,0.28,310, 341, 0};
-Alphasense_COB4 cob4(param1);
+// COb4 -> 354
+AlphasenseSensorParam param1 = {"CO-B4", COB4_n, 0.8, 330, 316, 510, 0.408, 336, 321, 0};
+Alphasense_COB4 cob4_s1(param1);
 
+// COb4 -> 357
+AlphasenseSensorParam param1_1 = {"CO-B4", COB4_n, 0.8, 353, 328, 454, 0.363, 343, 328, 0};
+Alphasense_COB4 cob4_s2(param1_1);
+
+/*
 AlphasenseSensorParam param2 = {"NH3-B1", COB4_n, 0.8, 775, 277, 59, 0.047, 277, 278, 0};
 Alphasense_NH3 nh3(param2);
 
@@ -40,6 +45,7 @@ Alphasense_NO2 no2(param5);
 
 AlphasenseSensorParam param6 = {"SO2", SO2B4_n, 0.8, 361, 350, 363, 0.29, 335, 343, 0};
 Alphasense_SO2 so2(param6);
+*/
 
 #define DHTPIN 13     // Digital pin connected to the DHT sensor
 #define DHTTYPE DHT22   // DHT 22  (AM2302), AM2321
@@ -48,18 +54,10 @@ Alphasense_SO2 so2(param6);
 #define ADS_SDA 21
 #define ADS_SCL 22
 Adafruit_ADS1115 ads;
-//enum {S0 = 16, S1 = 17, S2 = 4, S3 = 2}; // funcionou 
-enum {S0 = 17, S1 = 2, S2 = 4, S3 = 16};
+enum {S0 = 17, S1 = 2, S2 = 4, S3 = 16}; // Pinos Multiplexador
 
 //#include <oled/SSD1306Wire.h>
 //SSD1306Wire *display = new SSD1306Wire(0x3c, SDA_OLED, SCL_OLED, RST_OLED, GEOMETRY_128_64);
-
-
-
-
-#define _stringfy(s) #s
-#define stringfy_we(x) _stringfy(x##_WE_PIN)
-#define stringfy_ae(x) _stringfy(x##_AE_PIN)
 
 
 /**
@@ -69,7 +67,13 @@ enum {S0 = 17, S1 = 2, S2 = 4, S3 = 16};
  * 
  */
 
-/*typedef enum {
+/*
+
+#define _stringfy(s) #s
+#define stringfy_we(x) _stringfy(x##_WE_PIN)
+#define stringfy_ae(x) _stringfy(x##_AE_PIN)
+
+typedef enum {
   #define EXPAND_PINS(SENSOR)  SENSOR##_WE_PIN, SENSOR##_AE_PIN,
   #include "sensors_config_pins.h"
   #undef EXPAND_PINS
@@ -95,9 +99,6 @@ typedef enum {
   TOTAL_ANALOG_PINS
 }SensorAnalogPins;
 
-
-static uint8_t mydata[] = "Hello, world!";
-
 typedef struct __attribute__((packed)) _sensors_readings{
   float co_ppb;
   float nh3_ppb;
@@ -111,9 +112,11 @@ typedef struct __attribute__((packed)) _sensors_readings{
 
 } SensorsReadings;
 
-SensorsReadings readings; 
+SensorsReadings readings = {6.144}; 
+uint16_t data_payload[9];
 
 osjob_t sendjob;
+uint32_t userUTCTime; // Seconds since the UTC epoch
 
 // LoRaWAN NwkSKey, network session key
 // This should be in big-endian (aka msb).
@@ -121,7 +124,7 @@ u1_t NWKSKEY[16] = { 0x25, 0xBF, 0x21, 0xDC, 0x06, 0x33, 0x50, 0x70, 0x5F, 0xF1,
 
 // LoRaWAN AppSKey, application session key
 // This should also be in big-endian (aka msb).
-u1_t APPSKEY[16] = { 0x2B, 0x3C, 0x26, 0xBC, 0x96, 0x0C, 0xAA, 0x3D, 0xE1, 0x2A, 0x70, 0xEB, 0x8D, 0xED, 0x2F, 0xF7 };
+u1_t APPSKEY[16] = {0x5C, 0xB0, 0x03, 0x13, 0xAD, 0x1B, 0x19, 0x8E, 0xB3, 0x6B, 0x5A, 0x91, 0x25, 0x2F, 0x39, 0x93};
 
 // LoRaWAN end-device address (DevAddr)
 // See http://thethingsnetwork.org/wiki/AddressSpace
@@ -146,22 +149,9 @@ void do_send(osjob_t* job){
         // Prepare upstream data transmission at the next possible time.
         // data = [co_ppb, no2_ppb, ox_ppb, h2s_ppb, nh3_ppb, so2_ppb, temp, umid]
         // static uint8_t mydata[] = "Hello, world!";
-
-        float *kkkkk;
-        kkkkk = (float*)&readings; // Isso é uma gambi das boas
-
-        uint8_t *data = new uint8_t[18]; //  12B sensors + 4B temp and humidity + 2B anemom
-
-        for(uint32_t i = 1; i < 18; i+=2){
-
-          uint16_t aux = LMIC_f2uflt16(*(kkkkk + i/2) / 6.144); // 6.144 is the adc max value
-          data[i-1] = aux & 0x00FF;
-          data[i] = (aux & 0xFF00) >> 8;
-
-        }
-
+      
+#if (PRINT_MESSAGE == 1)
         for(int i = 1; i < 18; i+=2){
-          //  
           //uint16_t aux = (data[i] << 8) | data[i-1];
           uint16_t aux = LMIC_f2uflt16(1.6);
           uint8_t b = (aux & 0xF000) >> 12;
@@ -169,24 +159,30 @@ void do_send(osjob_t* job){
           Serial.print("Teste: "); Serial.print(aux);Serial.print(" : ");Serial.println(f / 4096.0 * pow(2, b-15));
           // f/4096 * 2^(b-15)
         }
-
-        
-        LMIC_setTxData2(1, data, sizeof(data)-1, 0);
+#endif
+        LMIC_requestNetworkTime(requestNetworkTimeCallback, &userUTCTime);
+        LMIC_setTxData2(1, (unsigned char *) data_payload, 2*9, 0);
+        //LMIC_setTxData2(1, (unsigned char *) s, sizeof(s), 0);
         Serial.println(F("Packet queued"));
-        delete data;
+
+     
     }
     // Next TX is scheduled after TX_COMPLETE event.
 }
 
+volatile uint32_t timeReq = 0;
+volatile bool flagTimeReq = true;
 volatile bool flagADC = false;
-uint32_t timer_aux = 0;
 volatile uint32_t lastIntrAt = 0;
+
 hw_timer_t *timer = NULL;
 portMUX_TYPE timerMux = portMUX_INITIALIZER_UNLOCKED;
+uint32_t timer_aux = 0;
 
 void IRAM_ATTR timerADC(){
   portENTER_CRITICAL_ISR(&timerMux);
   flagADC = true;
+  ++timeReq > 86400 ? (flagTimeReq = true) : (flagTimeReq = false);
   lastIntrAt = millis();
   portEXIT_CRITICAL_ISR(&timerMux);
 }
@@ -209,7 +205,14 @@ void setup() {
     Serial.println(F("Starting"));
     Serial.print(F("Frequency: ")); Serial.println(getCpuFrequencyMhz());
     Serial.print(F("Frequency ABP: ")); Serial.println(getApbFrequency());
-   
+    
+    time_t t;
+    time (&t);
+    struct tm *timeinfo;
+    timeinfo = localtime(&t);
+    
+    std::cout << "Hora: " << asctime(timeinfo) << std::endl;
+
     //dht.begin();
 
     init_lora(&sendjob, DEVADDR, NWKSKEY, APPSKEY);
@@ -243,36 +246,23 @@ void setup() {
 
 }
 
-
 void loop() {
 
   uint16_t adc = 0;
   float v[13]; // L
   float anemometro=0, temperature=0, humidity=0;
 
-  for(uint8_t i = 0; i < TOTAL_ANALOG_PINS; i++){
-
-      digitalWrite(S0, bitRead(i, 0));digitalWrite(S1, bitRead(i, 1));
-      digitalWrite(S2, bitRead(i, 2));digitalWrite(S3, bitRead(i, 3));
-      delayMicroseconds(10); 
-
-      adc = ads.readADC_SingleEnded(0);
-      v[i] = ads.computeVolts(adc);
-  }
-
-#if (PRINT_ANALOG_READS == 1)
-  Serial.println("Imprimindo leituras adc");
-
-  for(auto& i : v){
-    Serial.print(i); Serial.print(" ");
-  }
-  Serial.println(" ");
-  Serial.print("Temp: ");Serial.println(temperature);
-  Serial.print("Umid: ");Serial.println(humidity);
-#endif
-
   os_runloop_once();
-
+  
+  if(flagTimeReq){
+    // Fazer o timeReq
+    timeReq = 0;
+    //flagTimeReq = false;
+    //LMIC_requestNetworkTime(requestNetworkTimeCallback, &userUTCTime);
+    //LMIC_setTxData2(1, (unsigned char *) "Hello", 5, 0);
+        
+  }
+  
   if(flagADC){
 
     portENTER_CRITICAL(&timerMux);
@@ -280,17 +270,29 @@ void loop() {
     portEXIT_CRITICAL(&timerMux);
 
     //Serial.print("Tempo: ");Serial.println(lastIntrAt - timer_aux);
-    timer_aux = lastIntrAt;
+    //timer_aux = lastIntrAt;
 
-    for(uint8_t i = 0; i < (6*2) + 1; i++){
+    for(uint8_t i = 0; i < TOTAL_ANALOG_PINS; i++){
 
       digitalWrite(S0, bitRead(i, 0));digitalWrite(S1, bitRead(i, 1));
       digitalWrite(S2, bitRead(i, 2));digitalWrite(S3, bitRead(i, 3));
-      delayMicroseconds(10); 
+      delayMicroseconds(5); 
 
-      adc = ads.readADC_SingleEnded(0);
-      v[i] = ads.computeVolts(adc);
+      //adc = ads.readADC_SingleEnded(0);
+      //v[i] = ads.computeVolts(adc);
     }
+
+    readings.co_ppb = (float)cob4_s1.ppb(1000*v[CO_WE_PIN], 1000*v[CO_AE_PIN], 20.0);
+    readings.nh3_ppb = (float)cob4_s2.ppb(1000*v[NH3_WE_PIN], 1000*v[NH3_AE_PIN], 20.0);
+    //std::cout << "CO_s1 " << v[CO_WE_PIN] << " " << v[CO_AE_PIN] << " " << readings.co_ppb << std::endl;
+    //std::cout << "CO_s2 " << v[NH3_WE_PIN] << " " << v[NH3_AE_PIN] << " " << readings.nh3_ppb << std::endl;
+
+    float *kkkkk;
+    kkkkk = (float*)&readings; // Isso é uma gambi das boas
+
+    //uint8_t *data = new uint8_t[18]; //  12B sensors + 4B temp and humidity + 2B anemom
+    for(int i = 0; i < 9; i++)
+        *(data_payload+i) = LMIC_f2uflt16(*(kkkkk + i)); // 6.144 is the adc max value
 
 #if (PRINT_ANALOG_READS == 1)
     Serial.println("Imprimindo leituras adc");
