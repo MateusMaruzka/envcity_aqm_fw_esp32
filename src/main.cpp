@@ -12,6 +12,10 @@
 #include <hal/hal.h>
 #include <time.h>
 #include <sys/time.h>
+#include <chrono>
+#include <cstdlib>
+#include <iostream>
+#include <iomanip>
 
 #include "Alphasense_GasSensors.hpp"
 #include "anemometro_analog.hpp"
@@ -26,11 +30,6 @@
 AlphasenseSensorParam param1 = {"CO-B4", COB4_n, 0.8, 330, 316, 510, 0.408, 336, 321, 0};
 Alphasense_COB4 cob4_s1(param1);
 
-// COb4 -> 357
-AlphasenseSensorParam param1_1 = {"CO-B4", COB4_n, 0.8, 353, 328, 454, 0.363, 343, 328, 0};
-Alphasense_COB4 cob4_s2(param1_1);
-
-/*
 AlphasenseSensorParam param2 = {"NH3-B1", COB4_n, 0.8, 775, 277, 59, 0.047, 277, 278, 0};
 Alphasense_NH3 nh3(param2);
 
@@ -45,7 +44,6 @@ Alphasense_NO2 no2(param5);
 
 AlphasenseSensorParam param6 = {"SO2", SO2B4_n, 0.8, 361, 350, 363, 0.29, 335, 343, 0};
 Alphasense_SO2 so2(param6);
-*/
 
 #define DHTPIN 13     // Digital pin connected to the DHT sensor
 #define DHTTYPE DHT22   // DHT 22  (AM2302), AM2321
@@ -173,7 +171,6 @@ void do_send(osjob_t* job){
 volatile uint32_t timeReq = 0;
 volatile bool flagTimeReq = true;
 volatile bool flagADC = false;
-volatile uint32_t lastIntrAt = 0;
 
 hw_timer_t *timer = NULL;
 portMUX_TYPE timerMux = portMUX_INITIALIZER_UNLOCKED;
@@ -183,7 +180,6 @@ void IRAM_ATTR timerADC(){
   portENTER_CRITICAL_ISR(&timerMux);
   flagADC = true;
   ++timeReq > 86400 ? (flagTimeReq = true) : (flagTimeReq = false);
-  lastIntrAt = millis();
   portEXIT_CRITICAL_ISR(&timerMux);
 }
 
@@ -206,14 +202,14 @@ void setup() {
     Serial.print(F("Frequency: ")); Serial.println(getCpuFrequencyMhz());
     Serial.print(F("Frequency ABP: ")); Serial.println(getApbFrequency());
     
+    setenv("TZ","<-03>3",1);
+    tzset();
+
     time_t t;
     time (&t);
     struct tm *timeinfo;
     timeinfo = localtime(&t);
-    
-    std::cout << "Hora: " << asctime(timeinfo) << std::endl;
-
-    //dht.begin();
+    std::cout << timeinfo->tm_hour << "h" << timeinfo->tm_min << ":" << timeinfo->tm_sec << std::endl;
 
     init_lora(&sendjob, DEVADDR, NWKSKEY, APPSKEY);
 
@@ -256,10 +252,12 @@ void loop() {
   
   if(flagTimeReq){
     // Fazer o timeReq
+    
+    
+    portENTER_CRITICAL(&timerMux);
     timeReq = 0;
-    //flagTimeReq = false;
-    //LMIC_requestNetworkTime(requestNetworkTimeCallback, &userUTCTime);
-    //LMIC_setTxData2(1, (unsigned char *) "Hello", 5, 0);
+    LMIC_requestNetworkTime(requestNetworkTimeCallback, &userUTCTime);
+    portEXIT_CRITICAL(&timerMux);
         
   }
   
@@ -268,9 +266,6 @@ void loop() {
     portENTER_CRITICAL(&timerMux);
     flagADC = false;
     portEXIT_CRITICAL(&timerMux);
-
-    //Serial.print("Tempo: ");Serial.println(lastIntrAt - timer_aux);
-    //timer_aux = lastIntrAt;
 
     for(uint8_t i = 0; i < TOTAL_ANALOG_PINS; i++){
 
@@ -284,9 +279,7 @@ void loop() {
 
     readings.co_ppb = (float)cob4_s1.ppb(1000*v[CO_WE_PIN], 1000*v[CO_AE_PIN], 20.0);
     readings.nh3_ppb = (float)cob4_s2.ppb(1000*v[NH3_WE_PIN], 1000*v[NH3_AE_PIN], 20.0);
-    //std::cout << "CO_s1 " << v[CO_WE_PIN] << " " << v[CO_AE_PIN] << " " << readings.co_ppb << std::endl;
-    //std::cout << "CO_s2 " << v[NH3_WE_PIN] << " " << v[NH3_AE_PIN] << " " << readings.nh3_ppb << std::endl;
-
+   
     float *kkkkk;
     kkkkk = (float*)&readings; // Isso é uma gambi das boas
 

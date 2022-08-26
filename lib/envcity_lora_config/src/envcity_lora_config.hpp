@@ -1,6 +1,7 @@
 #ifndef ENVCITY_LORA_CONFIG
 #define ENVCITY_LORA_CONFIG
 
+#include <Arduino.h>
 #include <iostream>
 #include "lmic.h"
 #include "time.h"
@@ -11,6 +12,8 @@ extern osjob_t sendjob;
 
 extern void do_send(osjob_t* j);
 
+extern volatile bool flagTimeReq;
+extern portMUX_TYPE timerMux;
 
 // Schedule TX every this many seconds (might become longer due to duty
 // cycle limitations).

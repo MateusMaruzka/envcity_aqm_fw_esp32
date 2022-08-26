@@ -140,7 +140,7 @@ void requestNetworkTimeCallback(void *ptrUTCtime, int flagSuccess){
 
     if (flagSuccess != 1) {
         std::cout <<  "USER CALLBACK: Not a success" << std::endl;
-       // return;
+        return;
     }
 
     flagSuccess = LMIC_getNetworkTimeReference(&lmicTimeReference);
@@ -168,5 +168,17 @@ void requestNetworkTimeCallback(void *ptrUTCtime, int flagSuccess){
     timeval tv;//Cria a estrutura temporaria para funcao abaixo.
     tv.tv_sec = *pUserUTCTime;//Atribui minha data atual. Voce pode usar o NTP para isso ou o site citado no artigo!
     settimeofday(&tv, NULL);//Configura o RTC para manter a data atribuida atualizada.
+
+    time_t t;
+    time (&t);
+    struct tm *timeinfo;
+    timeinfo = localtime(&t);
+
+    std::cout << timeinfo->tm_hour << "h" << timeinfo->tm_min - 18 << "min" << timeinfo->tm_sec << "s" << std::endl;
+
+    portENTER_CRITICAL(&timerMux);
+    flagTimeReq = false;
+    portEXIT_CRITICAL(&timerMux);
+
 
 }   
