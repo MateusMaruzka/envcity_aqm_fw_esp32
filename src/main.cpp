@@ -1,21 +1,13 @@
-#include <string>
+#include <iostream>
+#include <chrono>
 #include <math.h>
-
-#include <Adafruit_ADS1X15.h>
-#include <Wire.h>
+#include <time.h>
 
 #include <Arduino.h>
-#include <ArduinoJson.h>
-
 #include <lmic.h>
-#include "arduino_lmic_hal_configuration.h"
 #include <hal/hal.h>
-#include <time.h>
-#include <sys/time.h>
-#include <chrono>
-#include <cstdlib>
-#include <iostream>
-#include <iomanip>
+#include <Adafruit_ADS1X15.h>
+#include <Wire.h>
 
 #include "Alphasense_GasSensors.hpp"
 #include "anemometro_analog.hpp"
@@ -85,7 +77,6 @@ char *enum_str_full[] = {
     #undef EXPAND_PINS  
 };*/
 
-
 typedef enum {
   CO_WE_PIN = 0, CO_AE_PIN, 
   NH3_WE_PIN, NH3_AE_PIN, 
@@ -112,6 +103,10 @@ typedef struct __attribute__((packed)) _sensors_readings{
 
 SensorsReadings readings = {6.144}; 
 uint16_t data_payload[9];
+
+//TaskHandle_t os_loop_handle;
+//TaskHandle_t core0_handle;
+
 
 osjob_t sendjob;
 uint32_t userUTCTime; // Seconds since the UTC epoch
@@ -158,9 +153,8 @@ void do_send(osjob_t* job){
           // f/4096 * 2^(b-15)
         }
 #endif
-        LMIC_requestNetworkTime(requestNetworkTimeCallback, &userUTCTime);
-        LMIC_setTxData2(1, (unsigned char *) data_payload, 2*9, 0);
-        //LMIC_setTxData2(1, (unsigned char *) s, sizeof(s), 0);
+        // LMIC_requestNetworkTime(requestNetworkTimeCallback, &userUTCTime);
+        LMIC_setTxData2(1, (unsigned char *) data_payload, 2*9, 1);
         Serial.println(F("Packet queued"));
 
      
@@ -174,7 +168,6 @@ volatile bool flagADC = false;
 
 hw_timer_t *timer = NULL;
 portMUX_TYPE timerMux = portMUX_INITIALIZER_UNLOCKED;
-uint32_t timer_aux = 0;
 
 void IRAM_ATTR timerADC(){
   portENTER_CRITICAL_ISR(&timerMux);
@@ -193,8 +186,79 @@ void init_timer(){
   timerAlarmEnable(timer);
 }
 
+void task_os_loop_once(void *pvParameters){
+
+  for(;;){
+    os_runloop_once();
+
+      if(flagTimeReq){
+          
+      portENTER_CRITICAL(&timerMux);
+      timeReq = 0;
+      LMIC_requestNetworkTime(requestNetworkTimeCallback, &userUTCTime);
+      portEXIT_CRITICAL(&timerMux);
+          
+    }
+  }
+
+}
+
+void task_core0(void *pvParameters){
+
+  for(;;){
+
+    uint16_t adc = 0;
+    float v[13]; // L
+    float anemometro=0, temperature=0, humidity=0;
+    
+    if(flagADC){
+
+    //std::cout << "FlagADC" << std::endl;
+    portENTER_CRITICAL(&timerMux);
+    flagADC = false;
+    portEXIT_CRITICAL(&timerMux);
+
+    for(uint8_t i = 0; i < TOTAL_ANALOG_PINS; i++){
+
+      digitalWrite(S0, bitRead(i, 0));digitalWrite(S1, bitRead(i, 1));
+      digitalWrite(S2, bitRead(i, 2));digitalWrite(S3, bitRead(i, 3));
+      delayMicroseconds(5); 
+
+      //adc = ads.readADC_SingleEnded(0);
+      //v[i] = ads.computeVolts(adc);
+    }
+
+    //readings.co_ppb = (float)cob4_s1.ppb(1000*v[CO_WE_PIN], 1000*v[CO_AE_PIN], 20.0);
+   
+    float *kkkkk;
+    kkkkk = (float*)&readings; // Isso é uma gambi das boas
+
+    //uint8_t *data = new uint8_t[18]; //  12B sensors + 4B temp and humidity + 2B anemom
+    for(int i = 0; i < 9; i++)
+        *(data_payload+i) = LMIC_f2uflt16(*(kkkkk + i)); // 6.144 is the adc max value
+
+    #if (PRINT_ANALOG_READS == 1)
+    Serial.println("Imprimindo leituras adc");
+
+    for(auto& i : v){
+      Serial.print(i); Serial.print(" ");
+    }
+    Serial.println(" ");
+    Serial.print("Temp: ");Serial.println(temperature);
+    Serial.print("Umid: ");Serial.println(humidity);
+    #endif  
+
+    digitalWrite(25, !digitalRead(25));
+    }
+
+  }
+
+  vTaskDelete(NULL);
+
+}
+
 void setup() {
-  
+
     while (!Serial); // wait for Serial to be initialized
     Serial.begin(115200);
     delay(100);     // per sample code on RF_95 test
@@ -202,8 +266,8 @@ void setup() {
     Serial.print(F("Frequency: ")); Serial.println(getCpuFrequencyMhz());
     Serial.print(F("Frequency ABP: ")); Serial.println(getApbFrequency());
     
-    setenv("TZ","<-03>3",1);
-    tzset();
+    //setenv("TZ","<-03>3",1);
+    //tzset();
 
     time_t t;
     time (&t);
@@ -238,7 +302,15 @@ void setup() {
   // LED
   pinMode(25, OUTPUT);
 
-  timer_aux = millis();
+  //You must disable wdt timer when using arduino framework
+  //Feeding the wdt timer doest work
+  //disableCore0WDT();
+  //disableCore1WDT();
+  //disableLoopWDT();
+  //xTaskCreatePinnedToCore(task_os_loop_once, "LMIC_Os_loop", 30000, NULL,0, &os_loop_handle, 1);
+  //xTaskCreatePinnedToCore(task_core0, "task_core0", 10000, NULL,0, &core0_handle, 0);
+  //configASSERT( os_loop_handle );
+  //configASSERT( core0_handle );
 
 }
 
@@ -251,12 +323,10 @@ void loop() {
   os_runloop_once();
   
   if(flagTimeReq){
-    // Fazer o timeReq
-    
-    
+        
     portENTER_CRITICAL(&timerMux);
     timeReq = 0;
-    LMIC_requestNetworkTime(requestNetworkTimeCallback, &userUTCTime);
+    //LMIC_requestNetworkTime(requestNetworkTimeCallback, &userUTCTime);
     portEXIT_CRITICAL(&timerMux);
         
   }
@@ -277,8 +347,7 @@ void loop() {
       //v[i] = ads.computeVolts(adc);
     }
 
-    readings.co_ppb = (float)cob4_s1.ppb(1000*v[CO_WE_PIN], 1000*v[CO_AE_PIN], 20.0);
-    readings.nh3_ppb = (float)cob4_s2.ppb(1000*v[NH3_WE_PIN], 1000*v[NH3_AE_PIN], 20.0);
+    //readings.co_ppb = (float)cob4_s1.ppb(1000*v[CO_WE_PIN], 1000*v[CO_AE_PIN], 20.0);
    
     float *kkkkk;
     kkkkk = (float*)&readings; // Isso é uma gambi das boas

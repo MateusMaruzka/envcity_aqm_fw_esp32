@@ -180,5 +180,4 @@ void requestNetworkTimeCallback(void *ptrUTCtime, int flagSuccess){
     flagTimeReq = false;
     portEXIT_CRITICAL(&timerMux);
 
-
 }   
