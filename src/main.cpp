@@ -12,6 +12,7 @@
 #include "Alphasense_GasSensors.hpp"
 #include "anemometro_analog.hpp"
 #include "envcity_lora_config.hpp"
+#include "esp32_fs.h"
 
 //#include "DHT.h"
 
@@ -49,6 +50,7 @@ enum {S0 = 17, S1 = 2, S2 = 4, S3 = 16}; // Pinos Multiplexador
 //#include <oled/SSD1306Wire.h>
 //SSD1306Wire *display = new SSD1306Wire(0x3c, SDA_OLED, SCL_OLED, RST_OLED, GEOMETRY_128_64);
 
+SPIClass spi_sdcard(1);
 
 /**
  * @brief You must put them in order that the sensors are connected to the board(REV2)
@@ -203,59 +205,6 @@ void task_os_loop_once(void *pvParameters){
 
 }
 
-void task_core0(void *pvParameters){
-
-  for(;;){
-
-    uint16_t adc = 0;
-    float v[13]; // L
-    float anemometro=0, temperature=0, humidity=0;
-    
-    if(flagADC){
-
-    //std::cout << "FlagADC" << std::endl;
-    portENTER_CRITICAL(&timerMux);
-    flagADC = false;
-    portEXIT_CRITICAL(&timerMux);
-
-    for(uint8_t i = 0; i < TOTAL_ANALOG_PINS; i++){
-
-      digitalWrite(S0, bitRead(i, 0));digitalWrite(S1, bitRead(i, 1));
-      digitalWrite(S2, bitRead(i, 2));digitalWrite(S3, bitRead(i, 3));
-      delayMicroseconds(5); 
-
-      //adc = ads.readADC_SingleEnded(0);
-      //v[i] = ads.computeVolts(adc);
-    }
-
-    //readings.co_ppb = (float)cob4_s1.ppb(1000*v[CO_WE_PIN], 1000*v[CO_AE_PIN], 20.0);
-   
-    float *kkkkk;
-    kkkkk = (float*)&readings; // Isso é uma gambi das boas
-
-    //uint8_t *data = new uint8_t[18]; //  12B sensors + 4B temp and humidity + 2B anemom
-    for(int i = 0; i < 9; i++)
-        *(data_payload+i) = LMIC_f2uflt16(*(kkkkk + i)); // 6.144 is the adc max value
-
-    #if (PRINT_ANALOG_READS == 1)
-    Serial.println("Imprimindo leituras adc");
-
-    for(auto& i : v){
-      Serial.print(i); Serial.print(" ");
-    }
-    Serial.println(" ");
-    Serial.print("Temp: ");Serial.println(temperature);
-    Serial.print("Umid: ");Serial.println(humidity);
-    #endif  
-
-    digitalWrite(25, !digitalRead(25));
-    }
-
-  }
-
-  vTaskDelete(NULL);
-
-}
 
 void setup() {
 
@@ -266,8 +215,9 @@ void setup() {
     Serial.print(F("Frequency: ")); Serial.println(getCpuFrequencyMhz());
     Serial.print(F("Frequency ABP: ")); Serial.println(getApbFrequency());
     
-    //setenv("TZ","<-03>3",1);
-    //tzset();
+    if(!init_sdcard(&spi_sdcard)){
+      Serial.println("Erro SDCARD"); 
+    }
 
     time_t t;
     time (&t);
