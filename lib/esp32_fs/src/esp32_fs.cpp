@@ -10,7 +10,7 @@ SPIClass *spi1;
 bool init_sdcard(SPIClass *spi){
     spi1 = spi;
 
-    if(!SD.begin(22, *spi1)){
+    if(!SD.begin(13, *spi1, 10)){
         Serial.println("Card Mount Failed");
         return false;
     }
@@ -99,6 +99,8 @@ void writeFile(fs::FS &fs, const char * path, const char * message){
     Serial.printf("Writing file: %s\n", path);
 
     File file = fs.open(path, FILE_WRITE);
+    Serial.print(file.availableForWrite());Serial.println("Avail for wr");
+        
     if(!file){
         Serial.println("Failed to open file for writing");
         return;

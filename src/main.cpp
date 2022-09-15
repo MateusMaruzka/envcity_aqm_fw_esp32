@@ -12,12 +12,18 @@
 #include "Alphasense_GasSensors.hpp"
 #include "anemometro_analog.hpp"
 #include "envcity_lora_config.hpp"
-#include "esp32_fs.h"
+#include "DHT.h"
+#include <string.h>
+#include <sys/unistd.h>
+#include <sys/stat.h>
+#include "esp_vfs_fat.h"
+#include "sdmmc_cmd.h"
+#include "driver/sdmmc_host.h"
+#include "driver/sdspi_host.h"
+#include "SPI.h"
 
-//#include "DHT.h"
-
-#define PRINT_ANALOG_READS 0
-#define PRINT_MESSAGE 0
+#define PRINT_ANALOG_READS 1
+#define PRINT_MESSAGE 1
 
 // COb4 -> 354
 AlphasenseSensorParam param1 = {"CO-B4", COB4_n, 0.8, 330, 316, 510, 0.408, 336, 321, 0};
@@ -38,19 +44,17 @@ Alphasense_NO2 no2(param5);
 AlphasenseSensorParam param6 = {"SO2", SO2B4_n, 0.8, 361, 350, 363, 0.29, 335, 343, 0};
 Alphasense_SO2 so2(param6);
 
-#define DHTPIN 13     // Digital pin connected to the DHT sensor
-#define DHTTYPE DHT22   // DHT 22  (AM2302), AM2321
-//DHT dht(DHTPIN, DHTTYPE);
+#define DHTPIN 23    // Digital pin connected to the DHT sensor
+#define DHTTYPE DHT11   // DHT 22  (AM2302), AM2321
+DHT dht(DHTPIN, DHTTYPE);
 
 #define ADS_SDA 21
 #define ADS_SCL 22
 Adafruit_ADS1115 ads;
 enum {S0 = 17, S1 = 2, S2 = 4, S3 = 16}; // Pinos Multiplexador
 
-//#include <oled/SSD1306Wire.h>
-//SSD1306Wire *display = new SSD1306Wire(0x3c, SDA_OLED, SCL_OLED, RST_OLED, GEOMETRY_128_64);
 
-SPIClass spi_sdcard(1);
+
 
 /**
  * @brief You must put them in order that the sensors are connected to the board(REV2)
@@ -80,35 +84,31 @@ char *enum_str_full[] = {
 };*/
 
 typedef enum {
-  CO_WE_PIN = 0, CO_AE_PIN, 
-  NH3_WE_PIN, NH3_AE_PIN, 
-  H2S_WE_PIN, H2S_AE_PIN, 
-  NO2_WE_PIN, NO2_AE_PIN, 
   SO2_WE_PIN, SO2_AE_PIN, 
   OX_WE_PIN, OX_AE_PIN, 
+  NO2_WE_PIN, NO2_AE_PIN, 
+  NH3_WE_PIN, NH3_AE_PIN, 
+  CO_WE_PIN, CO_AE_PIN, 
+  H2S_WE_PIN, H2S_AE_PIN, 
   ANEM_PIN,
   TOTAL_ANALOG_PINS
 }SensorAnalogPins;
 
 typedef struct __attribute__((packed)) _sensors_readings{
-  float co_ppb;
-  float nh3_ppb;
-  float no2_ppb;
-  float so2_ppb;
-  float ox_ppb;
-  float h2s_ppb;
-  float anem;
-  float temp;
-  float humidity;
+  float co_ppb; //0,1,2,3
+  float nh3_ppb;//4,5,6,7
+  float no2_ppb;//8,9,10,11
+  float so2_ppb;//12,13,14,15
+  float ox_ppb; //16
+  float h2s_ppb; //20
+  float anem; // 24
+  float temp; // 28
+  float humidity; //32
 
 } SensorsReadings;
 
 SensorsReadings readings = {6.144}; 
 uint16_t data_payload[9];
-
-//TaskHandle_t os_loop_handle;
-//TaskHandle_t core0_handle;
-
 
 osjob_t sendjob;
 uint32_t userUTCTime; // Seconds since the UTC epoch
@@ -156,10 +156,12 @@ void do_send(osjob_t* job){
         }
 #endif
         // LMIC_requestNetworkTime(requestNetworkTimeCallback, &userUTCTime);
-        LMIC_setTxData2(1, (unsigned char *) data_payload, 2*9, 1);
+
+        Serial.print("COlmic: "); Serial.println(readings.co_ppb);
+        Serial.print("Size: "); Serial.println(sizeof(SensorsReadings));
+        LMIC_setTxData2(1, (unsigned char *) &readings, sizeof(SensorsReadings), 0);
         Serial.println(F("Packet queued"));
 
-     
     }
     // Next TX is scheduled after TX_COMPLETE event.
 }
@@ -188,23 +190,6 @@ void init_timer(){
   timerAlarmEnable(timer);
 }
 
-void task_os_loop_once(void *pvParameters){
-
-  for(;;){
-    os_runloop_once();
-
-      if(flagTimeReq){
-          
-      portENTER_CRITICAL(&timerMux);
-      timeReq = 0;
-      LMIC_requestNetworkTime(requestNetworkTimeCallback, &userUTCTime);
-      portEXIT_CRITICAL(&timerMux);
-          
-    }
-  }
-
-}
-
 
 void setup() {
 
@@ -215,9 +200,7 @@ void setup() {
     Serial.print(F("Frequency: ")); Serial.println(getCpuFrequencyMhz());
     Serial.print(F("Frequency ABP: ")); Serial.println(getApbFrequency());
     
-    if(!init_sdcard(&spi_sdcard)){
-      Serial.println("Erro SDCARD"); 
-    }
+    dht.begin();
 
     time_t t;
     time (&t);
@@ -238,7 +221,7 @@ void setup() {
     ads.setGain(GAIN_TWOTHIRDS);  // ADS1115: 2/3x gain +/- 6.144V  1 bit = 0.1875mV (default)
     if (!ads.begin(0x48, &Wire)) {
       Serial.println("Failed to initialize ADS.");
-      //while (1);
+      while (1);
     }else {
        Serial.println("ADS_ok");
     }
@@ -250,25 +233,16 @@ void setup() {
   pinMode(S3, OUTPUT);
 
   // LED
-  pinMode(25, OUTPUT);
-
-  //You must disable wdt timer when using arduino framework
-  //Feeding the wdt timer doest work
-  //disableCore0WDT();
-  //disableCore1WDT();
-  //disableLoopWDT();
-  //xTaskCreatePinnedToCore(task_os_loop_once, "LMIC_Os_loop", 30000, NULL,0, &os_loop_handle, 1);
-  //xTaskCreatePinnedToCore(task_core0, "task_core0", 10000, NULL,0, &core0_handle, 0);
-  //configASSERT( os_loop_handle );
-  //configASSERT( core0_handle );
+  //pinMode(25, OUTPUT);
 
 }
 
 void loop() {
 
+  static int cont = 0;
   uint16_t adc = 0;
   float v[13]; // L
-  float anemometro=0, temperature=0, humidity=0;
+  float anemometro=0;
 
   os_runloop_once();
   
@@ -283,9 +257,27 @@ void loop() {
   
   if(flagADC){
 
+  
     portENTER_CRITICAL(&timerMux);
     flagADC = false;
     portEXIT_CRITICAL(&timerMux);
+
+    /*Serial.println(spi_sdcard->getPinSS());Serial.println(SPI.getPinSS());
+    Serial.println(spi_sdcard->getSPINum());Serial.println(SPI.getSPINum());
+
+    if(++cont > 5){
+        //spi_sdcard.begin(5, 38, 25, 13);//sck,miso,mosi,cs
+        File txtFile = SD.open("/tristeza.txt", FILE_WRITE);
+        if (!txtFile) {
+          Serial.print("error opening ");
+          Serial.println("/tristeza.txt");
+          
+        }
+        txtFile.println();
+        txtFile.println("Hello World!");
+        cont = 0;
+    }*/
+
 
     for(uint8_t i = 0; i < TOTAL_ANALOG_PINS; i++){
 
@@ -293,19 +285,32 @@ void loop() {
       digitalWrite(S2, bitRead(i, 2));digitalWrite(S3, bitRead(i, 3));
       delayMicroseconds(5); 
 
-      //adc = ads.readADC_SingleEnded(0);
-      //v[i] = ads.computeVolts(adc);
+      adc = ads.readADC_SingleEnded(0);
+      v[i] = ads.computeVolts(adc);
     }
 
-    //readings.co_ppb = (float)cob4_s1.ppb(1000*v[CO_WE_PIN], 1000*v[CO_AE_PIN], 20.0);
-   
-    float *kkkkk;
-    kkkkk = (float*)&readings; // Isso é uma gambi das boas
+    float temp = dht.readTemperature();
+    float humidity = dht.readHumidity();
+    if(isnan(temp) && isnan(humidity)){
+      readings.temp = temp;
+      readings.humidity = humidity;
+    }
+    
+    readings.co_ppb = (float)cob4_s1.ppb(1000*v[CO_WE_PIN], 1000*v[CO_AE_PIN], readings.temp);
+    readings.h2s_ppb = (float)h2s.ppb(1000*v[H2S_WE_PIN], 1000*v[H2S_AE_PIN], readings.temp);
+    readings.no2_ppb = (float)no2.ppb(1000*v[NO2_WE_PIN], 1000*v[NO2_AE_PIN], readings.temp);
+    readings.so2_ppb = (float)so2.ppb(1000*v[SO2_WE_PIN], 1000*v[SO2_AE_PIN], readings.temp);
+    readings.nh3_ppb = (float)nh3.ppb(1000*v[NH3_WE_PIN], 1000*v[NH3_AE_PIN], readings.temp);
+    readings.ox_ppb = 0*(float)ox.ppb(1000*v[OX_WE_PIN], 1000*v[OX_AE_PIN], readings.temp);
+
+
+    Serial.print("CO: "); Serial.println(readings.co_ppb);
+    //float *kkkkk;
+    //kkkkk = (float*)&readings; // Isso é uma gambi das boas
 
     //uint8_t *data = new uint8_t[18]; //  12B sensors + 4B temp and humidity + 2B anemom
-    for(int i = 0; i < 9; i++)
-        *(data_payload+i) = LMIC_f2uflt16(*(kkkkk + i)); // 6.144 is the adc max value
-
+    //for(int i = 0; i < 9; i++)
+    //    *(data_payload+i) = LMIC_f2uflt16(*(kkkkk + i)/10000); // 6.144 is the adc max value
 #if (PRINT_ANALOG_READS == 1)
     Serial.println("Imprimindo leituras adc");
 
@@ -313,12 +318,12 @@ void loop() {
       Serial.print(i); Serial.print(" ");
     }
     Serial.println(" ");
-    Serial.print("Temp: ");Serial.println(temperature);
+    Serial.print("Temp: ");Serial.println(temp);
     Serial.print("Umid: ");Serial.println(humidity);
 #endif
 
 
-    digitalWrite(25, !digitalRead(25));
+    //digitalWrite(25, !digitalRead(25));
   }
 
 }
