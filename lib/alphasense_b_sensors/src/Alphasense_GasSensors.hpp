@@ -6,7 +6,7 @@
 #include <string>
 #include <array>
 
-typedef enum {COB4_n, H2SB4_n, NOB4_n, NO2B43F_n, OXB431_n, SO2B4_n} AlphasenseModel;
+typedef enum {COB4_n, H2SB4_n, NH3, NO2B43F_n, OXB431_n, SO2B4_n} AlphasenseModel;
 
 
 struct AlphasenseSensorParam {
@@ -33,16 +33,20 @@ public:
     AlphasenseGasSensor() {};
     AlphasenseGasSensor(AlphasenseSensorParam);
 
-    double ppb(float, float, float);
+    virtual float ppb(float, float, float);
     
     void sensorConfiguration();
 
-    virtual double algorithm1(float raw_we, float raw_ae, float temp);
-    virtual double algorithm2(float raw_we, float raw_ae, float temp);
-    virtual double algorithm3(float raw_we, float raw_ae, float temp);
-    virtual double algorithm4(float raw_we, float temp);
+    virtual float algorithm1(float raw_we, float raw_ae, float temp);
+    virtual float algorithm2(float raw_we, float raw_ae, float temp);
+    virtual float algorithm3(float raw_we, float raw_ae, float temp);
+    virtual float algorithm4(float raw_we, float temp);
 
-    double simpleRead(float raw_we, float raw_ae);
+    float simpleRead(float raw_we, float raw_ae);
+
+    double getGain(){
+        return this->_gain;
+    }
 
     std::ostream& print(std::ostream& os)  const {
         return os << "Teste Sobrecarga" << std::endl;
@@ -67,14 +71,14 @@ class Alphasense_COB4 : public AlphasenseGasSensor
 {
 public:
     Alphasense_COB4(AlphasenseSensorParam);
-    void teste();
+    float ppb(float, float, float);
 };
 
 class Alphasense_NH3 : public AlphasenseGasSensor
 {
 public:
     Alphasense_NH3(AlphasenseSensorParam param) : AlphasenseGasSensor(param) {}
-    void teste();
+    float ppb(float, float, float);
 };
 
 class Alphasense_H2S : public AlphasenseGasSensor
@@ -82,7 +86,7 @@ class Alphasense_H2S : public AlphasenseGasSensor
 
 public:
     Alphasense_H2S(AlphasenseSensorParam param) : AlphasenseGasSensor(param) {}
-    void teste();
+    float ppb(float, float, float);
 };
 
 class Alphasense_SO2 : public AlphasenseGasSensor
@@ -90,7 +94,7 @@ class Alphasense_SO2 : public AlphasenseGasSensor
 
 public:
     Alphasense_SO2(AlphasenseSensorParam param) : AlphasenseGasSensor(param) {}
-    void teste();
+    float ppb(float, float, float);
 };
 
 class Alphasense_NO2 : public AlphasenseGasSensor
@@ -98,15 +102,20 @@ class Alphasense_NO2 : public AlphasenseGasSensor
 
 public:
     Alphasense_NO2(AlphasenseSensorParam param) : AlphasenseGasSensor(param) {}
-    void teste();
 };
 
 class Alphasense_OX : public AlphasenseGasSensor
 {
+private:
+    double no2_sensitivity;
 
 public:
-    Alphasense_OX(AlphasenseSensorParam param) : AlphasenseGasSensor(param) {}
-    void teste();
+///    Alphasense_OX(AlphasenseSensorParam param) : AlphasenseGasSensor(param) {}
+    Alphasense_OX(AlphasenseSensorParam param) :  AlphasenseGasSensor(param){
+        this->no2_sensitivity = param.no2_sensitivity;
+    }
+
+    float ppb(float we_raw, float ae_raw, float no2, float temp);
 };
 
 std::ostream& operator<< (std::ostream& os, AlphasenseGasSensor& obj);

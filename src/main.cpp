@@ -1,6 +1,6 @@
 #include <iostream>
 #include <chrono>
-#include <math.h>
+#include <cmath>
 #include <time.h>
 
 #include <Arduino.h>
@@ -16,14 +16,10 @@
 #include <string.h>
 #include <sys/unistd.h>
 #include <sys/stat.h>
-#include "esp_vfs_fat.h"
-#include "sdmmc_cmd.h"
-#include "driver/sdmmc_host.h"
-#include "driver/sdspi_host.h"
 #include "SPI.h"
 
 #define PRINT_ANALOG_READS 1
-#define PRINT_MESSAGE 1
+#define PRINT_MESSAGE 0
 
 // COb4 -> 354
 AlphasenseSensorParam param1 = {"CO-B4", COB4_n, 0.8, 330, 316, 510, 0.408, 336, 321, 0};
@@ -52,9 +48,6 @@ DHT dht(DHTPIN, DHTTYPE);
 #define ADS_SCL 22
 Adafruit_ADS1115 ads;
 enum {S0 = 17, S1 = 2, S2 = 4, S3 = 16}; // Pinos Multiplexador
-
-
-
 
 /**
  * @brief You must put them in order that the sensors are connected to the board(REV2)
@@ -86,13 +79,14 @@ char *enum_str_full[] = {
 typedef enum {
   SO2_WE_PIN, SO2_AE_PIN, 
   OX_WE_PIN, OX_AE_PIN, 
-  NO2_WE_PIN, NO2_AE_PIN, 
   NH3_WE_PIN, NH3_AE_PIN, 
   CO_WE_PIN, CO_AE_PIN, 
-  H2S_WE_PIN, H2S_AE_PIN, 
+  NO2_WE_PIN = 8, NO2_AE_PIN = 9, 
+  H2S_WE_PIN = 10, H2S_AE_PIN = 11, 
   ANEM_PIN,
   TOTAL_ANALOG_PINS
 }SensorAnalogPins;
+
 
 typedef struct __attribute__((packed)) _sensors_readings{
   float co_ppb; //0,1,2,3
@@ -108,7 +102,6 @@ typedef struct __attribute__((packed)) _sensors_readings{
 } SensorsReadings;
 
 SensorsReadings readings = {6.144}; 
-uint16_t data_payload[9];
 
 osjob_t sendjob;
 uint32_t userUTCTime; // Seconds since the UTC epoch
@@ -155,10 +148,11 @@ void do_send(osjob_t* job){
           // f/4096 * 2^(b-15)
         }
 #endif
-        // LMIC_requestNetworkTime(requestNetworkTimeCallback, &userUTCTime);
+        if(flagTimeReq)
+          LMIC_requestNetworkTime(requestNetworkTimeCallback, &userUTCTime);
 
-        Serial.print("COlmic: "); Serial.println(readings.co_ppb);
-        Serial.print("Size: "); Serial.println(sizeof(SensorsReadings));
+        //Serial.print("COlmic: "); Serial.println(readings.co_ppb);
+        //Serial.print("Size: "); Serial.println(sizeof(SensorsReadings));
         LMIC_setTxData2(1, (unsigned char *) &readings, sizeof(SensorsReadings), 0);
         Serial.println(F("Packet queued"));
 
@@ -221,7 +215,7 @@ void setup() {
     ads.setGain(GAIN_TWOTHIRDS);  // ADS1115: 2/3x gain +/- 6.144V  1 bit = 0.1875mV (default)
     if (!ads.begin(0x48, &Wire)) {
       Serial.println("Failed to initialize ADS.");
-      while (1);
+      //while (1);
     }else {
        Serial.println("ADS_ok");
     }
@@ -246,14 +240,15 @@ void loop() {
 
   os_runloop_once();
   
-  if(flagTimeReq){
+  /*if(flagTimeReq){
         
+    Serial.println("Request Time req");
     portENTER_CRITICAL(&timerMux);
     timeReq = 0;
-    //LMIC_requestNetworkTime(requestNetworkTimeCallback, &userUTCTime);
     portEXIT_CRITICAL(&timerMux);
-        
-  }
+    //LMIC_requestNetworkTime(requestNetworkTimeCallback, &userUTCTime);
+
+  }*/
   
   if(flagADC){
 
@@ -262,46 +257,31 @@ void loop() {
     flagADC = false;
     portEXIT_CRITICAL(&timerMux);
 
-    /*Serial.println(spi_sdcard->getPinSS());Serial.println(SPI.getPinSS());
-    Serial.println(spi_sdcard->getSPINum());Serial.println(SPI.getSPINum());
-
-    if(++cont > 5){
-        //spi_sdcard.begin(5, 38, 25, 13);//sck,miso,mosi,cs
-        File txtFile = SD.open("/tristeza.txt", FILE_WRITE);
-        if (!txtFile) {
-          Serial.print("error opening ");
-          Serial.println("/tristeza.txt");
-          
-        }
-        txtFile.println();
-        txtFile.println("Hello World!");
-        cont = 0;
-    }*/
-
-
     for(uint8_t i = 0; i < TOTAL_ANALOG_PINS; i++){
 
       digitalWrite(S0, bitRead(i, 0));digitalWrite(S1, bitRead(i, 1));
       digitalWrite(S2, bitRead(i, 2));digitalWrite(S3, bitRead(i, 3));
       delayMicroseconds(5); 
 
-      adc = ads.readADC_SingleEnded(0);
-      v[i] = ads.computeVolts(adc);
+      //adc = ads.readADC_SingleEnded(0);
+      //v[i] = ads.computeVolts(adc);
     }
 
-    float temp = dht.readTemperature();
-    float humidity = dht.readHumidity();
-    if(isnan(temp) && isnan(humidity)){
-      readings.temp = temp;
-      readings.humidity = humidity;
-    }
+    //float temp = dht.readTemperature();
+    //float humidity = dht.readHumidity();
+    //if(!isnan(temp) && !isnan(humidity)){
+    //  readings.temp = temp;
+    //  readings.humidity = humidity;
+    //}else{
+    //  Serial.println("Error reading temp and humid");
+    //}
     
     readings.co_ppb = (float)cob4_s1.ppb(1000*v[CO_WE_PIN], 1000*v[CO_AE_PIN], readings.temp);
     readings.h2s_ppb = (float)h2s.ppb(1000*v[H2S_WE_PIN], 1000*v[H2S_AE_PIN], readings.temp);
     readings.no2_ppb = (float)no2.ppb(1000*v[NO2_WE_PIN], 1000*v[NO2_AE_PIN], readings.temp);
     readings.so2_ppb = (float)so2.ppb(1000*v[SO2_WE_PIN], 1000*v[SO2_AE_PIN], readings.temp);
     readings.nh3_ppb = (float)nh3.ppb(1000*v[NH3_WE_PIN], 1000*v[NH3_AE_PIN], readings.temp);
-    readings.ox_ppb = 0*(float)ox.ppb(1000*v[OX_WE_PIN], 1000*v[OX_AE_PIN], readings.temp);
+    readings.ox_ppb =  (float)ox.ppb(1000*v[OX_WE_PIN], 1000*v[OX_AE_PIN], readings.no2_ppb,readings.temp);
 
 
     Serial.print("CO: "); Serial.println(readings.co_ppb);
@@ -314,12 +294,19 @@ void loop() {
 #if (PRINT_ANALOG_READS == 1)
     Serial.println("Imprimindo leituras adc");
 
+    time_t t;
+    time (&t);
+    //struct tm *timeinfo;
+    //timeinfo = localtime(&t);
+    Serial.printf("%ld UTC ", t);
     for(auto& i : v){
       Serial.print(i); Serial.print(" ");
     }
     Serial.println(" ");
-    Serial.print("Temp: ");Serial.println(temp);
-    Serial.print("Umid: ");Serial.println(humidity);
+    Serial.print("Temp: ");Serial.println(readings.temp);
+    Serial.print("Umid: ");Serial.println(readings.humidity);
+    //Serial.print("Temp: ");Serial.println(temp);
+    //Serial.print("Umid: ");Serial.println(humidity);
 #endif
 
 

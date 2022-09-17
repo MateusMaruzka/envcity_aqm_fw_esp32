@@ -13,6 +13,7 @@ extern osjob_t sendjob;
 extern void do_send(osjob_t* j);
 
 extern volatile bool flagTimeReq;
+extern volatile uint32_t timeReq;
 extern portMUX_TYPE timerMux;
 
 // Schedule TX every this many seconds (might become longer due to duty

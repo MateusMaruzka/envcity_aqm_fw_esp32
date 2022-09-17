@@ -38,7 +38,7 @@ void init_lora(osjob_t *sendjob, u4_t DEVADDR, u1_t *NWKSKEY, u1_t *APPSKEY){
     LMIC.dn2Dr = DR_SF9;
 
     // Set data rate and transmit power for uplink
-    LMIC_setDrTxpow(DR_SF12,14);
+    LMIC_setDrTxpow(DR_SF7,14);
 
     // Start job
     //do_send(&sendjob);
@@ -178,6 +178,7 @@ void requestNetworkTimeCallback(void *ptrUTCtime, int flagSuccess){
 
     portENTER_CRITICAL(&timerMux);
     flagTimeReq = false;
+    timeReq = 0;
     portEXIT_CRITICAL(&timerMux);
 
 }   

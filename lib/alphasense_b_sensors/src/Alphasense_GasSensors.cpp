@@ -81,43 +81,62 @@ void AlphasenseGasSensor::sensorConfiguration(){
         
 }
 
-double AlphasenseGasSensor::algorithm1(float raw_we, float raw_ae, float temp){
+float AlphasenseGasSensor::algorithm1(float raw_we, float raw_ae, float temp){
     //auto kt = ajuste_temp["CO-B4"][temp];
     //std::cout << kt << std::endl;
     auto t = *(kt + (int)(temp / 10) + 3);
     return (raw_we - this->_electr_we ) - t*(raw_ae - this->_electr_ae);
 }
 
-double AlphasenseGasSensor::algorithm2(float raw_we, float raw_ae, float temp){
+float AlphasenseGasSensor::algorithm2(float raw_we, float raw_ae, float temp){
     //auto kt = ajuste_temp["CO-B4"][temp / 10 + 3];
     // auto kt = this->kt[1][temp / 10 + 3];
     auto t = *(kt + (int)(temp / 10) + 3 + 1*9);
     return (raw_we - this->_electr_we) - (this->_we_zero / this->_ae_zero)*t*(raw_ae - this->_electr_ae);
 }
 
-double AlphasenseGasSensor::algorithm3(float raw_we, float raw_ae, float temp){
+float AlphasenseGasSensor::algorithm3(float raw_we, float raw_ae, float temp){
     
     auto t = *(kt + (int)(temp / 10) + 3 + 2*9);
     return (raw_we - this->_electr_we) - (this->_we_zero - this->_ae_zero) - t*(raw_ae - this->_electr_ae);
 }
 
-double AlphasenseGasSensor::algorithm4(float raw_we, float temp){
+float AlphasenseGasSensor::algorithm4(float raw_we, float temp){
     
     auto t = *(kt + (int)(temp / 10) + 3 + 3*9);
     return (raw_we - this->_electr_we - this->_we_zero - t);
 }
 
-double AlphasenseGasSensor::simpleRead(float raw_we, float raw_ae){
+float AlphasenseGasSensor::simpleRead(float raw_we, float raw_ae){
 
     return (raw_we - this->_electr_we) - (raw_ae - this->_electr_ae);
 }
 
-double AlphasenseGasSensor::ppb(float raw_we, float raw_ae, float temp){
+float AlphasenseGasSensor::ppb(float raw_we, float raw_ae, float temp){
     return this->simpleRead(raw_we, raw_ae) / this->_sensitivity;
 }
 
 Alphasense_COB4::Alphasense_COB4(AlphasenseSensorParam param) : AlphasenseGasSensor(param){}
+float Alphasense_COB4::ppb(float we, float ae, float temp) {
+    return (float)algorithm1(we, ae, temp);
+}
 
+float Alphasense_H2S::ppb(float we, float ae, float temp){
+    return algorithm1(we, ae, temp);
+}
+
+float Alphasense_SO2::ppb(float we, float ae, float temp){
+    return algorithm1(we, ae, temp);
+}
+
+float Alphasense_NH3::ppb(float we, float ae, float temp){
+    return simpleRead(we, ae);
+}
+
+float Alphasense_OX::ppb(float we_raw, float ae_raw, float no2, float temp){
+
+    return algorithm1((we_raw - no2*this->no2_sensitivity*getGain()), ae_raw, temp);
+}
 
 std::ostream& operator<< (std::ostream& os, AlphasenseGasSensor& obj) {
     return obj.print(os);
