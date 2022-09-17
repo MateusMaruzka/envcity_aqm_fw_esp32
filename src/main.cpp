@@ -40,6 +40,8 @@ Alphasense_NO2 no2(param5);
 AlphasenseSensorParam param6 = {"SO2", SO2B4_n, 0.8, 361, 350, 363, 0.29, 335, 343, 0};
 Alphasense_SO2 so2(param6);
 
+Anemometro anem;
+
 #define DHTPIN 23    // Digital pin connected to the DHT sensor
 #define DHTTYPE DHT11   // DHT 22  (AM2302), AM2321
 DHT dht(DHTPIN, DHTTYPE);
@@ -233,22 +235,10 @@ void setup() {
 
 void loop() {
 
-  static int cont = 0;
   uint16_t adc = 0;
   float v[13]; // L
-  float anemometro=0;
 
   os_runloop_once();
-  
-  /*if(flagTimeReq){
-        
-    Serial.println("Request Time req");
-    portENTER_CRITICAL(&timerMux);
-    timeReq = 0;
-    portEXIT_CRITICAL(&timerMux);
-    //LMIC_requestNetworkTime(requestNetworkTimeCallback, &userUTCTime);
-
-  }*/
   
   if(flagADC){
 
@@ -263,18 +253,18 @@ void loop() {
       digitalWrite(S2, bitRead(i, 2));digitalWrite(S3, bitRead(i, 3));
       delayMicroseconds(5); 
 
-      //adc = ads.readADC_SingleEnded(0);
-      //v[i] = ads.computeVolts(adc);
+      adc = ads.readADC_SingleEnded(0);
+      v[i] = ads.computeVolts(adc);
     }
 
-    //float temp = dht.readTemperature();
-    //float humidity = dht.readHumidity();
-    //if(!isnan(temp) && !isnan(humidity)){
-    //  readings.temp = temp;
-    //  readings.humidity = humidity;
-    //}else{
-    //  Serial.println("Error reading temp and humid");
-    //}
+    float temp = dht.readTemperature();
+    float humidity = dht.readHumidity();
+    if(!isnan(temp) && !isnan(humidity)){
+      readings.temp = temp;
+      readings.humidity = humidity;
+    }else{
+      Serial.println("Error reading temp and humid");
+    }
     
     readings.co_ppb = (float)cob4_s1.ppb(1000*v[CO_WE_PIN], 1000*v[CO_AE_PIN], readings.temp);
     readings.h2s_ppb = (float)h2s.ppb(1000*v[H2S_WE_PIN], 1000*v[H2S_AE_PIN], readings.temp);
@@ -282,22 +272,16 @@ void loop() {
     readings.so2_ppb = (float)so2.ppb(1000*v[SO2_WE_PIN], 1000*v[SO2_AE_PIN], readings.temp);
     readings.nh3_ppb = (float)nh3.ppb(1000*v[NH3_WE_PIN], 1000*v[NH3_AE_PIN], readings.temp);
     readings.ox_ppb =  (float)ox.ppb(1000*v[OX_WE_PIN], 1000*v[OX_AE_PIN], readings.no2_ppb,readings.temp);
+    readings.anem = anem.windSpeed(v[ANEM_PIN]);
 
+    Serial.print("anem: "); Serial.println(readings.anem);
 
-    Serial.print("CO: "); Serial.println(readings.co_ppb);
-    //float *kkkkk;
-    //kkkkk = (float*)&readings; // Isso é uma gambi das boas
-
-    //uint8_t *data = new uint8_t[18]; //  12B sensors + 4B temp and humidity + 2B anemom
-    //for(int i = 0; i < 9; i++)
-    //    *(data_payload+i) = LMIC_f2uflt16(*(kkkkk + i)/10000); // 6.144 is the adc max value
 #if (PRINT_ANALOG_READS == 1)
     Serial.println("Imprimindo leituras adc");
 
     time_t t;
     time (&t);
-    //struct tm *timeinfo;
-    //timeinfo = localtime(&t);
+
     Serial.printf("%ld UTC ", t);
     for(auto& i : v){
       Serial.print(i); Serial.print(" ");
@@ -305,12 +289,9 @@ void loop() {
     Serial.println(" ");
     Serial.print("Temp: ");Serial.println(readings.temp);
     Serial.print("Umid: ");Serial.println(readings.humidity);
-    //Serial.print("Temp: ");Serial.println(temp);
-    //Serial.print("Umid: ");Serial.println(humidity);
+
 #endif
 
-
-    //digitalWrite(25, !digitalRead(25));
   }
 
 }
