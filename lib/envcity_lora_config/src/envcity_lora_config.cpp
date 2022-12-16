@@ -1,7 +1,7 @@
 #include "envcity_lora_config.hpp"
 
 
-void init_lora(osjob_t *sendjob, u4_t DEVADDR, u1_t *NWKSKEY, u1_t *APPSKEY){
+void init_lora(osjob_t *sendjob, u4_t DEVADDR, u1_t *NWKSKEY, u1_t *APPSKEY, u1_t subBand){
 
     // LMIC init
     os_init();
@@ -20,7 +20,7 @@ void init_lora(osjob_t *sendjob, u4_t DEVADDR, u1_t *NWKSKEY, u1_t *APPSKEY){
     // but only one group of 8 should (a subband) should be active
     // TTN recommends the second sub band, 1 in a zero based count.
     // https://github.com/TheThingsNetwork/gateway-conf/blob/master/US-global_conf.json
-    LMIC_selectSubBand(1);
+    LMIC_selectSubBand((u1_t)subBand);
 
     #elif defined(CFG_as923)
     // Set up the channels used in your country. Only two are defined by default,
@@ -38,7 +38,7 @@ void init_lora(osjob_t *sendjob, u4_t DEVADDR, u1_t *NWKSKEY, u1_t *APPSKEY){
     LMIC.dn2Dr = DR_SF9;
 
     // Set data rate and transmit power for uplink
-    LMIC_setDrTxpow(DR_SF7,14);
+    LMIC_setDrTxpow(DR_SF9,14);
 
     // Start job
     //do_send(&sendjob);

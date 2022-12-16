@@ -42,6 +42,8 @@ public:
     virtual float algorithm3(float raw_we, float raw_ae, float temp);
     virtual float algorithm4(float raw_we, float temp);
 
+    virtual void fourAlgorithms(float we, float ae, float v[4], float temp);
+
     float simpleRead(float raw_we, float raw_ae);
 
     double getGain(){
@@ -116,6 +118,7 @@ public:
     }
 
     float ppb(float we_raw, float ae_raw, float no2, float temp);
+    void fourAlgorithms(float we, float ae, float ppb[4], float no2, float temp);
 };
 
 std::ostream& operator<< (std::ostream& os, AlphasenseGasSensor& obj);

@@ -18,7 +18,7 @@ extern portMUX_TYPE timerMux;
 
 // Schedule TX every this many seconds (might become longer due to duty
 // cycle limitations).
-const unsigned TX_INTERVAL = 60;
+const unsigned TX_INTERVAL = 60*5;
 
 // These callbacks are only used in over-the-air activation, so they are
 // left empty here (we cannot leave them out completely unless
@@ -45,7 +45,7 @@ u4_t DEVADDR = 0x260D27C1 ; // <-- Change this address for every node!
 
 void onEvent (ev_t ev);
 
-void init_lora(osjob_t *sendjob, u4_t DEVADDR, u1_t *NWKSKEY, u1_t *APPSKEY);
+void init_lora(osjob_t *sendjob, u4_t DEVADDR, u1_t *NWKSKEY, u1_t *APPSKEY, u1_t subBand);
 
 void requestNetworkTimeCallback(void *ptrUTCtime, int flagSuccess);
 
