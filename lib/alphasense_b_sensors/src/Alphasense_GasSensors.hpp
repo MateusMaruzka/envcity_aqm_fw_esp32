@@ -46,6 +46,8 @@ public:
 
     float simpleRead(float raw_we, float raw_ae);
 
+    float getSensitivity(){return this->_sensitivity;}
+
     double getGain(){
         return this->_gain;
     }

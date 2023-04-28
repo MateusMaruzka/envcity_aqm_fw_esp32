@@ -24,6 +24,8 @@
 
 Adafruit_ADS1X15 ads; 
 
+int16_t temp = 0, umid = 0; 
+
 SensorsReadings readings;
 SensorVoltage voltages;
 
@@ -303,7 +305,6 @@ extern "C" void app_main() {
         float v[TOTAL_ANALOG_PINS];
        os_runloop_once();
 
-       int16_t temp = 0, umid = 0; 
        am2302_read(&temp, &umid);
        
         readings.temp = temp;
@@ -327,16 +328,21 @@ extern "C" void app_main() {
        Serial.println("");
 
         Serial.println("Concentration:");
-        Serial.print("H2S: "); Serial.println(h2s.ppb(v[H2S_WE_PIN], v[H2S_AE_PIN], temp/10.0));
+        h2s.fourAlgorithms(v[H2S_WE_PIN], v[H2S_AE_PIN], readings.h2s_ppb, temp/10.0);
+        Serial.print("H2S: ");
+        for(int i = 0; i < 4; i++){
+            Serial.print(readings.h2s_ppb[i]); Serial.print(", ");
+        }
         Serial.print("NH3: "); Serial.println(nh3.simpleRead(v[NH3_WE_PIN], v[NH3_AE_PIN]));
 
-        h2s.fourAlgorithms(v[H2S_WE_PIN], v[H2S_AE_PIN], readings.h2s_ppb, temp/10.0);
         readings.nh3_ppb[0] = nh3.simpleRead(v[NH3_WE_PIN], v[NH3_AE_PIN]);
 
-        voltages.h2s_we = v[H2S_WE_PIN];
+        // yfilt[i] = yfilt[i - 1] + (y[i] - yfilt[i - 1])/(filter_coef + 1)
+        voltages.h2s_we = voltages.h2s_we + (v[H2S_WE_PIN] - voltages.h2s_we) / (FILTER_COEF + 1);
         voltages.h2s_ae = v[H2S_AE_PIN];
         voltages.nh3_we = v[NH3_WE_PIN];
         voltages.nh3_ae = v[NH3_AE_PIN];
+
 
        vTaskDelay(pdMS_TO_TICKS(1000)); 
        // s_example_write_file("/sdcard/hello.txt", "Hello world!\n");

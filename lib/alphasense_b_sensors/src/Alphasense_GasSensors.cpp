@@ -111,7 +111,7 @@ void AlphasenseGasSensor::fourAlgorithms(float we, float ae, float *v, float tem
     v[0] = this->algorithm1(we, ae, temp) / this->_sensitivity;
     v[1] = this->algorithm2(we, ae, temp) / this->_sensitivity;
     v[2] = this->algorithm3(we, ae, temp) / this->_sensitivity;
-    v[3] = this->algorithm4(we, temp) / this->_sensitivity;
+    v[3] = this->algorithm4(we, temp)     / this->_sensitivity;
 
 }
 
@@ -125,12 +125,13 @@ float AlphasenseGasSensor::ppb(float raw_we, float raw_ae, float temp){
 }
 
 Alphasense_COB4::Alphasense_COB4(AlphasenseSensorParam param) : AlphasenseGasSensor(param){}
+
 float Alphasense_COB4::ppb(float we, float ae, float temp) {
     return (float)algorithm1(we, ae, temp);
 }
 
 float Alphasense_H2S::ppb(float we, float ae, float temp){
-    return algorithm1(we, ae, temp);
+    return this->algorithm1(we, ae, temp) / this->getSensitivity();
 }
 
 float Alphasense_SO2::ppb(float we, float ae, float temp){

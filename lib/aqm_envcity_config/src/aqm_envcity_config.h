@@ -10,6 +10,10 @@
 #define HM3305
 // Como fazer pelo buid flags do platformio?
 
+// Moving Average Filter
+
+#define FILTER_COEF 8
+
 typedef enum {
   H2S_WE_PIN, H2S_AE_PIN, 
   NH3_WE_PIN, NH3_AE_PIN, 
