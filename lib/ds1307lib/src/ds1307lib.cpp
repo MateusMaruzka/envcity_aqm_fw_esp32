@@ -60,16 +60,10 @@ esp_err_t ds1307_read_date(ds1307_date_t *date){
         i2cWrite(0, 0x68, buff, 1, 50);
 
         err = i2cRead(_config.i2c_num, _config.addr, buff, sizeof(buff), TIMEOUT, &readCount);
-
-        for(int i = 0; i < 7; i++){
-            printf("%d ", buff[i]);
-        }
-        printf("\n");
     
     }
 
     date->second = bcdToInt(buff[0]);
-    printf("sec: %d\n", date->second);
     date->minute = bcdToInt(buff[1]);
     date->hour = bcdToInt(buff[2]);
     date->weekDay = buff[3];

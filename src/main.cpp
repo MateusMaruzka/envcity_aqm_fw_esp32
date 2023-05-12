@@ -20,9 +20,15 @@
 #include "am2302.hpp"
 #include "mux.hpp"
 
+#include "Adafruit_PM25AQI.h"
+#include "SoftwareSerial.h"
+
 #include "aqm_envcity_config.h"
 
 Adafruit_ADS1X15 ads;
+
+SoftwareSerial pmSerial(4);
+Adafruit_PM25AQI aqi = Adafruit_PM25AQI();
 
 int16_t temp = 0, umid = 0;
 
@@ -72,6 +78,18 @@ u1_t APPSKEY[16] = {0x0C, 0x7B, 0x26, 0x49, 0x3D, 0x59, 0x72, 0x12, 0x4D, 0xFF, 
 // The library converts the address to network byte order as needed, so this should be in big-endian (aka msb) too.
 u4_t DEVADDR = 0x260D8129; // <-- Change this address for every node!
 
+
+//u1_t NWKSKEY[16] = {0x9c,0xa2,0x12,0xe7,0x3a,0x65,0xcd,0x4d,0x2d,0x68,0xe2,0xc7,0x78,0x08,0x99,0xaa};
+
+// LoRaWAN AppSKey, application session key
+// This should also be in big-endian (aka msb).
+//u1_t APPSKEY[16] = {0xfb,0x91,0x5c,0x4f,0xb4,0x9c,0xc5,0x41,0xf3,0xd4,0xe2,0xf6,0x47,0x4c,0xc3,0x59};
+
+// LoRaWAN end-device address (DevAddr)
+// See http://thethingsnetwork.org/wiki/AddressSpace
+// The library converts the address to network byte order as needed, so this should be in big-endian (aka msb) too.
+//u4_t DEVADDR = 0x0f66b66a; // <-- Change this address for every node!
+
 #endif
 
 osjob_t sendjob;
@@ -89,19 +107,15 @@ void do_send(osjob_t *job)
     else
     {
 
-        if (++count > 9)
+        if (++count > 1)
         {
 
             if (voltageOrPpb)
             {
-                LMIC_setTxData2(1, (unsigned char *)&readings, sizeof(SensorsReadings) - sizeof(unsigned long long), 0);
+                LMIC_setTxData2(1, (unsigned char *)&readings, sizeof(SensorsReadings), 0);
             }
             else
             {
-                // Serial.print("temp: "); Serial.println(voltages.temp);
-                // uint8_t *ptr = (uint8_t*)&voltages;
-                // ESP_LOGE("lmic", "temp: %d", voltages.temp);
-                // ESP_LOGE("lmic", "TEmp2 : %x %x", ptr[16] & 0xff, ptr[17] & 0xFf);
                 LMIC_setTxData2(2, (unsigned char *)&voltages, sizeof(SensorVoltage), 0);
             }
 
@@ -143,7 +157,7 @@ static esp_err_t s_file_exits(const char *path)
     }
     return ESP_FAIL;
 }
-static esp_err_t s_write_voltage_to_file(const char *path, SensorVoltage my_sensor_voltage, char *mode)
+static esp_err_t s_write_voltage_to_file(const char *path, char *mode, SensorVoltage my_sensor_voltage, char *time)
 {
 
     FILE *f = fopen(path, mode);
@@ -173,7 +187,7 @@ static esp_err_t s_write_voltage_to_file(const char *path, SensorVoltage my_sens
                 my_sensor_voltage.pm1_0,
                 my_sensor_voltage.pm2_5,
                 my_sensor_voltage.pm10,
-                my_sensor_voltage.time);
+                time);
 
         // close the file
         fclose(f);
@@ -195,19 +209,17 @@ static esp_err_t s_example_write_file(const char *path, char *data, char *mode)
 
     return ESP_OK;
 }
-static SensorVoltage getSensorVoltage(float v[])
+static void getSensorVoltage(float v[], SensorVoltage *sensorVoltage)
 {
-    SensorVoltage sensorVoltage;
-    sensorVoltage.co_we = v[CO_WE_PIN];
-    sensorVoltage.co_ae = v[CO_AE_PIN];
-    sensorVoltage.no2_we = v[NO2_WE_PIN];
-    sensorVoltage.no2_ae = v[NO2_AE_PIN];
-    sensorVoltage.so2_we = v[SO2_WE_PIN];
-    sensorVoltage.so2_ae = v[SO2_AE_PIN];
-    sensorVoltage.ox_we = v[OX_WE_PIN];
-    sensorVoltage.ox_ae = v[OX_AE_PIN];
-    sensorVoltage.anem = v[ANEM_PIN];
-    return sensorVoltage;
+    sensorVoltage->co_we = v[CO_WE_PIN];
+    sensorVoltage->co_ae = v[CO_AE_PIN];
+    sensorVoltage->no2_we = v[NO2_WE_PIN];
+    sensorVoltage->no2_ae = v[NO2_AE_PIN];
+    sensorVoltage->so2_we = v[SO2_WE_PIN];
+    sensorVoltage->so2_ae = v[SO2_AE_PIN];
+    sensorVoltage->ox_we = v[OX_WE_PIN];
+    sensorVoltage->ox_ae = v[OX_AE_PIN];
+    sensorVoltage->anem = v[ANEM_PIN];
 }
 
 void onEvent(ev_t ev)
@@ -301,6 +313,11 @@ extern "C" void app_main()
     Serial.begin(9600);
     while (!Serial);
 
+    Serial2.begin(9600, SERIAL_8N1, 4, 25);
+    pinMode(4, INPUT_PULLUP);
+    if(!aqi.begin_UART(&Serial2)){
+        ESP_LOGE(TAG, "PM sensor error");
+    }
     Wire.begin(21, 22, 100000);
 
     esp_err_t ret;
@@ -347,7 +364,7 @@ extern "C" void app_main()
     if (ret != ESP_OK)
     {
         Serial.println("Failed to initialize bus.");
-        return;
+        //return;
     }
 
     // This initializes the slot without card detect (CD) and write protect (WP) signals.
@@ -372,22 +389,27 @@ extern "C" void app_main()
                           "Make sure SD card lines have pull-up resistors in place.",
                           esp_err_to_name(ret));
         }
+
+    } else {
+        
+        sdmmc_card_print_info(stdout, card);
+
+        if (s_file_exits("/sdcard/log.csv") == ESP_OK)
+        {
+            Serial.println("File exists");
+            ESP_LOGE("SETUP", "Datalogger file exists");
+        }
+        else
+        {
+            ESP_LOGE("SETUP", "Datalogger file not exists. Creating new file");
+            s_example_write_file("/sdcard/log.csv", "co_we,co_ae,no2_we,no2_ae,so2_we,so2_ae,ox_we,ox_ae,anem,temp,umid,pm1.0,pm2.5,pm10.0, utc_time\n", "w");
+        }
+
+        Serial.println("Filesystem mounted");
+
     }
-    Serial.println("Filesystem mounted");
 
     // Card has been initialized, print its properties
-    sdmmc_card_print_info(stdout, card);
-
-    if (s_file_exits("/sdcard/log.csv") == ESP_OK)
-    {
-        Serial.println("File exists");
-        ESP_LOGE("SETUP", "Datalogger file exists");
-    }
-    else
-    {
-        ESP_LOGE("SETUP", "Datalogger file not exists. Creating new file");
-        s_example_write_file("/sdcard/log.csv", "co_we,co_ae,no2_we,no2_ae,so2_we,so2_ae,ox_we,ox_ae,anem,temp,umid,pm1.0,pm2.5,pm10.0, utc_time\n", "w");
-    }
 
     if (!ads.begin(0x48, &Wire))
     {
@@ -422,15 +444,43 @@ extern "C" void app_main()
         Serial.print(umid / 10.0);
         Serial.println(" %");
 
+        PM25_AQI_Data data;
+        if (! aqi.read(&data)) {
+            Serial.println("Could not read from AQI");
+            //return;
+        }
+        Serial.println("AQI reading success");
+
+        Serial.println();
+        Serial.println(F("---------------------------------------"));
+        Serial.println(F("Concentration Units (standard)"));
+        Serial.println(F("---------------------------------------"));
+        Serial.print(F("PM 1.0: ")); Serial.print(data.pm10_standard);
+        Serial.print(F("\t\tPM 2.5: ")); Serial.print(data.pm25_standard);
+        Serial.print(F("\t\tPM 10: ")); Serial.println(data.pm100_standard);
+        Serial.println(F("Concentration Units (environmental)"));
+        Serial.println(F("---------------------------------------"));
+        Serial.print(F("PM 1.0: ")); Serial.print(data.pm10_env);
+        Serial.print(F("\t\tPM 2.5: ")); Serial.print(data.pm25_env);
+        Serial.print(F("\t\tPM 10: ")); Serial.println(data.pm100_env);
+        Serial.println(F("---------------------------------------"));
+        Serial.print(F("Particles > 0.3um / 0.1L air:")); Serial.println(data.particles_03um);
+        Serial.print(F("Particles > 0.5um / 0.1L air:")); Serial.println(data.particles_05um);
+        Serial.print(F("Particles > 1.0um / 0.1L air:")); Serial.println(data.particles_10um);
+        Serial.print(F("Particles > 2.5um / 0.1L air:")); Serial.println(data.particles_25um);
+        Serial.print(F("Particles > 5.0um / 0.1L air:")); Serial.println(data.particles_50um);
+        Serial.print(F("Particles > 10 um / 0.1L air:")); Serial.println(data.particles_100um);
+        Serial.println(F("---------------------------------------"));
+
         Serial.println("Reading ADC: ");
         Wire.flush();
         for (int i = 0; i <= TOTAL_ANALOG_PINS; i++)
         {
 
             Mux.selectOutput(i);
-            uint16_t adc = ads.readADC_SingleEnded(0);
-            v[i] = ads.computeVolts(adc);
-            Serial.print(v[i]);
+            //uint16_t adc = ads.readADC_SingleEnded(0);
+            //v[i] = ads.computeVolts(adc);
+            //Serial.print(v[i]);
             Serial.print(", ");
             ets_delay_us(10);
         }
@@ -444,23 +494,23 @@ extern "C" void app_main()
         ox.fourAlgorithms(1000 * v[OX_WE_PIN], 1000 * v[OX_AE_PIN], readings.ox_ppb, readings.no2_ppb[0], readings.temp);
 
         // Fill the struct with the voltage readings
-        voltages = getSensorVoltage(v);
+        getSensorVoltage(v, &voltages);
 
         ds1307_date_t date;
         esp_err_t err = ds1307_read_date(&date);
-        Serial.print("date: ");
-        Serial.println(date.second);
+        char time[26];
+        snprintf(time, sizeof(time), "20%d-%d-%d-%d-%d-%d", date.year, date.month, date.day, date.hour, date.minute, date.second);
+
         if (err != ESP_OK)
         {
             ESP_LOGE("MAIN", "Error reading date from DS1307: %s", esp_err_to_name(err));
         }
         ESP_LOGI("MAIN", "Date: %d/%d/%d %d:%d:%d", date.day, date.month, date.year, date.hour, date.minute, date.second);
-        // snprintf(voltages.time, sizeof(voltages.time), "20%02i-%02i-%02i-%02i-%02i-%02i", date.year, date.month, date.day, date.hour, date.minute, date.second);
 
         // Old_Average + ((New_Sample – Old_Average) / (Sample_Size + 1))
         // readings.anem = readings.anem + (anem.windSpeed(v[ANEM_PIN]) - readings.anem) / 30;
 
-        s_write_voltage_to_file("/sdcard/log.csv", voltages, "a");
+        s_write_voltage_to_file("/sdcard/log.csv", "a",voltages, time);
         vTaskDelay(pdMS_TO_TICKS(5000));
     }
 }

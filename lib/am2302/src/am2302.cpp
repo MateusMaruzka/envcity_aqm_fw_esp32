@@ -170,7 +170,7 @@ esp_err_t am2302_read(int16_t *t, int16_t *h){
     rmt_item32_t *items = (rmt_item32_t *)xRingbufferReceive(ringbuf_handle, &len_items, portMAX_DELAY);
     rmt_rx_stop(CONFIG_AM2302_RMT_CHANNEL);
 
-    ESP_LOGE(TAG, "len_items = %d", len_items);
+    //ESP_LOGE(TAG, "len_items = %d", len_items);
 
     len_items /= 4;
 
@@ -197,10 +197,10 @@ esp_err_t am2302_read(int16_t *t, int16_t *h){
 
         // Verify checksum
         if(am2302_checksum(data_bytes, 5) == ESP_OK){
-            ESP_LOGE(TAG, "Checksum OK\n");
+            // ESP_LOGE(TAG, "Checksum OK\n");
         } else {
-            ESP_LOGE(TAG, "Checksum error\n");
-            //return
+            ESP_LOGE(TAG, "Checksum error");
+            // return
         }
 
         *t = convertTemperature(data_bytes);

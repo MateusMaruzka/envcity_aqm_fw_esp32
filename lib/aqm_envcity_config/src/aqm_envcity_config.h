@@ -34,10 +34,10 @@ typedef struct __attribute__((packed)) _sensors_readings{
   uint16_t pm1_0;
   uint16_t pm2_5;
   uint16_t pm10;
-  unsigned long long utc_time;
 } SensorsReadings;
 
 typedef struct __attribute__((packed)) _sensor_voltage{
+  
   float co_we;
   float co_ae;
   float no2_we;
@@ -47,13 +47,13 @@ typedef struct __attribute__((packed)) _sensor_voltage{
   float ox_we;
   float ox_ae;
   float anem;
+
   int16_t temp; // 1
   int16_t humidity; // 
 
   uint16_t pm1_0;
   uint16_t pm2_5;
   uint16_t pm10;
-  char time[26]; // '2023-03-29:12:00:00'
 
 } SensorVoltage;
 
