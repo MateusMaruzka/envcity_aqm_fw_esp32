@@ -18,6 +18,7 @@
 #include "Alphasense_GasSensors.hpp"
 #include "DHT.h"
 #include "am2302.hpp"
+#include "pms5003.h"
 #include "mux.hpp"
 
 #include "Adafruit_PM25AQI.h"
@@ -313,11 +314,14 @@ extern "C" void app_main()
     Serial.begin(9600);
     while (!Serial);
 
-    Serial2.begin(9600, SERIAL_8N1, 4, 25);
-    pinMode(4, INPUT_PULLUP);
-    if(!aqi.begin_UART(&Serial2)){
-        ESP_LOGE(TAG, "PM sensor error");
-    }
+    //Serial2.begin(9600, SERIAL_8N1, 4, 25);
+    //pinMode(4, INPUT_PULLUP);
+    //pinMode(25, OUTPUT);
+
+    //if(!aqi.begin_UART(&Serial2)){
+    //    ESP_LOGE(TAG, "PM sensor error");
+    //}
+    pms5003_init();
     Wire.begin(21, 22, 100000);
 
     esp_err_t ret;
@@ -444,34 +448,10 @@ extern "C" void app_main()
         Serial.print(umid / 10.0);
         Serial.println(" %");
 
-        PM25_AQI_Data data;
-        if (! aqi.read(&data)) {
-            Serial.println("Could not read from AQI");
-            //return;
-        }
-        Serial.println("AQI reading success");
-
-        Serial.println();
-        Serial.println(F("---------------------------------------"));
-        Serial.println(F("Concentration Units (standard)"));
-        Serial.println(F("---------------------------------------"));
-        Serial.print(F("PM 1.0: ")); Serial.print(data.pm10_standard);
-        Serial.print(F("\t\tPM 2.5: ")); Serial.print(data.pm25_standard);
-        Serial.print(F("\t\tPM 10: ")); Serial.println(data.pm100_standard);
-        Serial.println(F("Concentration Units (environmental)"));
-        Serial.println(F("---------------------------------------"));
-        Serial.print(F("PM 1.0: ")); Serial.print(data.pm10_env);
-        Serial.print(F("\t\tPM 2.5: ")); Serial.print(data.pm25_env);
-        Serial.print(F("\t\tPM 10: ")); Serial.println(data.pm100_env);
-        Serial.println(F("---------------------------------------"));
-        Serial.print(F("Particles > 0.3um / 0.1L air:")); Serial.println(data.particles_03um);
-        Serial.print(F("Particles > 0.5um / 0.1L air:")); Serial.println(data.particles_05um);
-        Serial.print(F("Particles > 1.0um / 0.1L air:")); Serial.println(data.particles_10um);
-        Serial.print(F("Particles > 2.5um / 0.1L air:")); Serial.println(data.particles_25um);
-        Serial.print(F("Particles > 5.0um / 0.1L air:")); Serial.println(data.particles_50um);
-        Serial.print(F("Particles > 10 um / 0.1L air:")); Serial.println(data.particles_100um);
-        Serial.println(F("---------------------------------------"));
-
+        pms_sensor_data_t data;
+        pms5003_read(&data);
+        print_pms_sensor_data(&data);
+  
         Serial.println("Reading ADC: ");
         Wire.flush();
         for (int i = 0; i <= TOTAL_ANALOG_PINS; i++)
