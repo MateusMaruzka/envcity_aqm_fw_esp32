@@ -59,22 +59,8 @@ void pms5003_init(){
     };
 
     ESP_ERROR_CHECK(uart_param_config(UART_NUM, &uart_config));
-    ESP_ERROR_CHECK(uart_set_pin(UART_NUM, UART_PIN_NO_CHANGE, GPIO_NUM_4, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE));
+    ESP_ERROR_CHECK(uart_set_pin(UART_NUM, UART_PIN_NO_CHANGE, GPIO_NUM_34, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE));
     ESP_ERROR_CHECK(uart_driver_install(UART_NUM, BUF_SIZE * 2, 0, 0, NULL, 0));
-
-
-
-    gpio_config_t gpio = {
-        .pin_bit_mask = (uint64_t)GPIO_NUM_25,
-        .mode         = (gpio_mode_t)GPIO_MODE_OUTPUT,
-        .pull_up_en   = GPIO_PULLUP_ENABLE,
-        .pull_down_en = GPIO_PULLDOWN_DISABLE,
-        .intr_type    = GPIO_INTR_DISABLE
-    };
-
-    ESP_ERROR_CHECK(gpio_config(&gpio));
-
-
 
 }
 
@@ -87,7 +73,7 @@ esp_err_t pms5003_read(pms_sensor_data_t *data_sensor){
     }
 
     int len = uart_read_bytes(UART_NUM, data, 256, portTICK_RATE_MS);
-    ESP_LOGE("PMS5003", "Read %d bytes", len);
+    // ESP_LOGE("PMS5003", "Read %d bytes", len);
 
     if(len <= 0){
         return ESP_FAIL;

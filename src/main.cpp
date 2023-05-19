@@ -50,9 +50,9 @@ Alphasense_SO2 so2(param6);
 
 ds1307_date_t date;
 
-#define TTGO
-
-#ifdef TC_TELECOM
+#define TC_TELECOM
+#define TC2 //#define TC2
+#if defined(TC_TELECOM) && defined(TC1) 
 /* TC TELECOM - Marcio Oyamada */
 
 // LoRaWAN NwkSKey, network session key
@@ -65,6 +65,15 @@ u1_t APPSKEY[16] = {0x82, 0xca, 0xc3, 0x33, 0xb6, 0x36, 0xae, 0x11, 0x1c, 0x71, 
 // See http://thethingsnetwork.org/wiki/AddressSpace
 // The library converts the address to network byte order as needed, so this should be in big-endian (aka msb) too.
 u4_t DEVADDR = 0x260D7446; // <-- Change this address for every node!
+
+
+#elif defined(TC_TELECOM) && defined(TC2)
+
+u1_t NWKSKEY[16] = {0x9c, 0xa2, 0x12, 0xe7, 0x3a, 0x65, 0xcd, 0x4d, 0x2d, 0x68, 0xe2, 0xc7, 0x78, 0x08, 0x99, 0xaa};
+
+u1_t APPSKEY[16] = {0xfb, 0x91, 0x5c, 0x4f, 0xb4, 0x9c, 0xc5, 0x41, 0xf3, 0xd4, 0xe2, 0xf6, 0x47, 0x4c, 0xc3, 0x59};
+
+u4_t DEVADDR = 0x0f66b66a; // <-- Change this address for every node!
 
 #elif defined(TTGO)
 
@@ -98,8 +107,8 @@ osjob_t sendjob;
 void do_send(osjob_t *job)
 {
     // Check if there is not a current TX/RX job running
-    static int count = 5;
-    static int voltageOrPpb = true;
+    static int count = 8;
+    static int voltageOrPpb = false;
 
     if (LMIC.opmode & OP_TXRXPEND)
     {
@@ -108,7 +117,7 @@ void do_send(osjob_t *job)
     else
     {
 
-        if (++count > 1)
+        if (count >= 8)
         {
 
             if (voltageOrPpb)
@@ -120,13 +129,13 @@ void do_send(osjob_t *job)
                 LMIC_setTxData2(2, (unsigned char *)&voltages, sizeof(SensorVoltage), 0);
             }
 
-            voltageOrPpb = !voltageOrPpb;
+            //voltageOrPpb = !voltageOrPpb;
 
             count = 0;
         }
         else
         {
-
+            count++;
             Serial.print(F("Skipping. Count: "));
             Serial.println(count);
             os_setTimedCallback(&sendjob, os_getTime() + sec2osticks(TX_INTERVAL), do_send);
@@ -314,13 +323,6 @@ extern "C" void app_main()
     Serial.begin(9600);
     while (!Serial);
 
-    //Serial2.begin(9600, SERIAL_8N1, 4, 25);
-    //pinMode(4, INPUT_PULLUP);
-    //pinMode(25, OUTPUT);
-
-    //if(!aqi.begin_UART(&Serial2)){
-    //    ESP_LOGE(TAG, "PM sensor error");
-    //}
     pms5003_init();
     Wire.begin(21, 22, 100000);
 
@@ -332,7 +334,14 @@ extern "C" void app_main()
     ESP_LOGE("INIT", "ds1307_init_default: %s", esp_err_to_name(ret));
 
     SPI.begin(5, 19, 27, 18);
-    init_lora(&sendjob, DEVADDR, NWKSKEY, APPSKEY, 1);
+
+    // LMIC init
+    u1_t sub_band = 1;
+    #if defined(TC_TELECOM)
+    sub_band = 0;
+    #endif
+
+    init_lora(&sendjob, DEVADDR, NWKSKEY, APPSKEY, sub_band);
 
     // Options for mounting the filesystem.
     // If format_if_mount_failed is set to true, SD card will be partitioned and
@@ -450,18 +459,24 @@ extern "C" void app_main()
 
         pms_sensor_data_t data;
         pms5003_read(&data);
-        print_pms_sensor_data(&data);
-  
+        // print_pms_sensor_data(&data);
+        
+        readings.pm1_0 = data.pm1_0_atm;
+        readings.pm2_5 = data.pm2_5_atm;
+        readings.pm10 = data.pm10_atm;
+
+        voltages.pm1_0 = data.pm1_0_atm;
+        voltages.pm2_5 = data.pm2_5_atm;
+        voltages.pm10 = data.pm10_atm;
+
         Serial.println("Reading ADC: ");
         Wire.flush();
         for (int i = 0; i <= TOTAL_ANALOG_PINS; i++)
         {
 
             Mux.selectOutput(i);
-            //uint16_t adc = ads.readADC_SingleEnded(0);
-            //v[i] = ads.computeVolts(adc);
-            //Serial.print(v[i]);
-            Serial.print(", ");
+            uint16_t adc = ads.readADC_SingleEnded(0);
+            v[i] = ads.computeVolts(adc);
             ets_delay_us(10);
         }
         Serial.println("");
