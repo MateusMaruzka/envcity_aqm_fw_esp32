@@ -231,7 +231,26 @@ static void getSensorVoltage(float v[], SensorVoltage *sensorVoltage)
     sensorVoltage->ox_ae = v[OX_AE_PIN];
     sensorVoltage->anem = v[ANEM_PIN];
 }
+static void applyMovingAverageFilter(float v[], SensorVoltage *sensorVoltageFiltered){
 
+    // y[n] = a*x[n] + (1-a)*y[n-1]
+    float a = 0.3;
+    float b = 1-a;
+
+    SensorVoltage xn;
+    getSensorVoltage(v, &xn);
+
+    sensorVoltageFiltered->co_we = a*xn.co_we + b*sensorVoltageFiltered->co_we;
+    sensorVoltageFiltered->co_ae = a*xn.co_ae + b*sensorVoltageFiltered->co_ae;
+    sensorVoltageFiltered->no2_we = a*xn.no2_we + b*sensorVoltageFiltered->no2_we;
+    sensorVoltageFiltered->no2_ae = a*xn.no2_ae + b*sensorVoltageFiltered->no2_ae;
+    sensorVoltageFiltered->so2_we = a*xn.so2_we + b*sensorVoltageFiltered->so2_we;
+    sensorVoltageFiltered->so2_ae = a*xn.so2_ae + b*sensorVoltageFiltered->so2_ae;
+    sensorVoltageFiltered->ox_we = a*xn.ox_we + b*sensorVoltageFiltered->ox_we;
+    sensorVoltageFiltered->ox_ae = a*xn.ox_ae + b*sensorVoltageFiltered->ox_ae;
+
+
+}
 void onEvent(ev_t ev)
 {
 
@@ -415,7 +434,7 @@ extern "C" void app_main()
         else
         {
             ESP_LOGE("SETUP", "Datalogger file not exists. Creating new file");
-            s_example_write_file("/sdcard/log.csv", "co_we,co_ae,no2_we,no2_ae,so2_we,so2_ae,ox_we,ox_ae,anem,temp,umid,pm1.0,pm2.5,pm10.0, utc_time\n", "w");
+            s_example_write_file("/sdcard/log.csv", "co_we,co_ae,no2_we,no2_ae,so2_we,so2_ae,ox_we,ox_ae,anem,temp,umid,pm1.0,pm2.5,pm10.0,utc_time\n", "w");
         }
 
         Serial.println("Filesystem mounted");
@@ -473,7 +492,6 @@ extern "C" void app_main()
         Wire.flush();
         for (int i = 0; i <= TOTAL_ANALOG_PINS; i++)
         {
-
             Mux.selectOutput(i);
             uint16_t adc = ads.readADC_SingleEnded(0);
             v[i] = ads.computeVolts(adc);
@@ -481,29 +499,28 @@ extern "C" void app_main()
         }
         Serial.println("");
 
-        Serial.println("Concentration:");
+        /* Serial.println("Concentration:");
 
         cob4_s1.fourAlgorithms(1000 * v[CO_WE_PIN], 1000 * v[CO_AE_PIN], readings.co_ppb, readings.temp);
         no2.fourAlgorithms(1000 * v[NO2_WE_PIN], 1000 * v[NO2_AE_PIN], readings.no2_ppb, readings.temp);
         so2.fourAlgorithms(1000 * v[SO2_WE_PIN], 1000 * v[SO2_AE_PIN], readings.so2_ppb, readings.temp);
-        ox.fourAlgorithms(1000 * v[OX_WE_PIN], 1000 * v[OX_AE_PIN], readings.ox_ppb, readings.no2_ppb[0], readings.temp);
+        ox.fourAlgorithms(1000 * v[OX_WE_PIN], 1000 * v[OX_AE_PIN], readings.ox_ppb, readings.no2_ppb[0], readings.temp); */
 
         // Fill the struct with the voltage readings
-        getSensorVoltage(v, &voltages);
+        //getSensorVoltage(v, &voltages);
+        applyMovingAverageFilter(v, &voltages);
 
         ds1307_date_t date;
         esp_err_t err = ds1307_read_date(&date);
         char time[26];
-        snprintf(time, sizeof(time), "20%d-%d-%d-%d-%d-%d", date.year, date.month, date.day, date.hour, date.minute, date.second);
+        snprintf(time, sizeof(time), "20%d/%d/%d:%d:%d:%d", date.year, date.month, date.day, date.hour, date.minute, date.second);
 
         if (err != ESP_OK)
         {
             ESP_LOGE("MAIN", "Error reading date from DS1307: %s", esp_err_to_name(err));
         }
-        ESP_LOGI("MAIN", "Date: %d/%d/%d %d:%d:%d", date.day, date.month, date.year, date.hour, date.minute, date.second);
+        ESP_LOGI("MAIN", "Date: %d/%d/%d:%d:%d:%d", date.day, date.month, date.year, date.hour, date.minute, date.second);
 
-        // Old_Average + ((New_Sample – Old_Average) / (Sample_Size + 1))
-        // readings.anem = readings.anem + (anem.windSpeed(v[ANEM_PIN]) - readings.anem) / 30;
 
         s_write_voltage_to_file("/sdcard/log.csv", "a",voltages, time);
         vTaskDelay(pdMS_TO_TICKS(5000));
